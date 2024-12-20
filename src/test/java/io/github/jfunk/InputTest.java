@@ -25,15 +25,10 @@ public class InputTest {
             Assert.assertFalse("", curr.isEof());
             Assert.assertEquals("", c, curr.get().charValue());
 
-
             Assert.assertFalse("", curr.isEof());
             Assert.assertEquals("", c, curr.get().charValue());
 
-            final Input<Character> next = curr.next();
-
-            curr.next();
-
-            curr = next;
+            curr = curr.next();
         }
 
         Assert.assertTrue("", curr.isEof());

@@ -4,7 +4,6 @@ import io.github.jfunk.Input;
 
 public record StringInput(int position, char[] data) implements Input<Character> {
 
-
     public StringInput(char[] data) {
         this(0, data);
     }

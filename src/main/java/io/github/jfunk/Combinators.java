@@ -20,12 +20,7 @@ public abstract class Combinators {
      * @return a parser that always fails.
      */
     public static <I, A> Parser<I, A> fail() {
-        return new ParserImpl<>(LTRUE) {
-            @Override
-            public Result<I, A> apply(Input<I> in) {
-                return failure(in);
-            }
-        };
+        return new Parser<>(LTRUE, Utils::failure);
     }
 
     /**
@@ -37,29 +32,17 @@ public abstract class Combinators {
      * @return a parser that always fails.
      */
     public static <I, A> Parser<I, A> fail(String msg) {
-        return new ParserImpl<>(LTRUE) {
-            @Override
-            public Result<I, A> apply(Input<I> in) {
-                return failure(msg, in);
-            }
-        };
+        return new Parser<>(LTRUE, in -> failure(msg, in));
     }
 
     /**
      * A parser that succeeds if the end of the input has been reached.
      *
      * @param <I> the input stream symbol type
-     * @return a parser that succeeds iff we are at the end of the input.
+     * @return a parser that succeeds if we are at the end of the input.
      */
     public static <I> Parser<I, Unit> eof() {
-        return new ParserImpl<>(LTRUE) {
-            @Override
-            public Result<I, Unit> apply(Input<I> in) {
-                return in.isEof() ?
-                        Result.success(Unit.UNIT, in) :
-                        failure(in);
-            }
-        };
+        return new Parser<>(LTRUE, in -> in.isEof() ? Result.success(Unit.UNIT, in) : failure(in));
     }
 
     /**
@@ -68,7 +51,7 @@ public abstract class Combinators {
      *
      * @param val the value expected by the parser
      * @param <I> the input stream symbol type
-     * @return as parser that succeeds if the next input symbol equals the given {@code value}
+     * @return a parser that succeeds if the next input symbol equals the given {@code value}
      */
     public static <I> Parser<I, I> value(I val) {
         return value(val, val);
@@ -85,15 +68,12 @@ public abstract class Combinators {
      * @return a parser that succeeds if the next input symbol equals the given {@code value}
      */
     public static <I, A> Parser<I, A> value(I val, A res) {
-        return new ParserImpl<>(LFALSE) {
-            @Override
-            public Result<I, A> apply(Input<I> in) {
-                if (in.get().equals(val)) {
-                    return Result.success(res, in.next());
-                }
-                return new Result.FailureMessage<>(in, "expected %s saw %s".formatted(val, in.get()));
+        return new Parser<>(LFALSE, in -> {
+            if (in.get().equals(val)) {
+                return Result.success(res, in.next());
             }
-        };
+            return new Result.FailureMessage<>(in, "expected %s saw %s".formatted(val, in.get()));
+        });
     }
 
     /**
@@ -105,15 +85,12 @@ public abstract class Combinators {
      * @return a parser that succeeds if the next input symbol satisfies the given predicate.
      */
     public static <I> Parser<I, I> satisfy(String name, Predicate<I> pred) {
-        return new ParserImpl<>(LFALSE) {
-            @Override
-            public Result<I, I> apply(Input<I> in) {
-                if (pred.test(in.get())) {
-                    return Result.success(in.get(), in.next());
-                }
-                return Result.failure(in, name);
+        return new Parser<>(LFALSE, in -> {
+            if (pred.test(in.get())) {
+                return Result.success(in.get(), in.next());
             }
-        };
+            return Result.failure(in, name);
+        });
     }
 
     /**
@@ -123,14 +100,7 @@ public abstract class Combinators {
      * @return a parser that succeeds on any input symbol
      */
     public static <I> Parser<I, I> any() {
-        return new ParserImpl<>(LFALSE) {
-            @Override
-            public Result<I, I> apply(Input<I> in) {
-                return in.isEof() ?
-                        failureEof(this, in) :
-                        Result.success(in.get(), in.next());
-            }
-        };
+        return new Parser<>(LFALSE, in -> in.isEof() ? Result.failureEof(in, "unexpected eof") : Result.success(in.get(), in.next()));
     }
 
     /**
@@ -144,7 +114,6 @@ public abstract class Combinators {
         return any();
     }
 
-
     /**
      * A parser that attempts one or more parsers in turn and returns the result
      * of the first that succeeds, or else fails.
@@ -155,8 +124,7 @@ public abstract class Combinators {
      * @param <A> the parser result type
      * @return a parser that attempts one or more parsers in turn
      */
-    public static <I, A>
-    Parser<I, A> choice(Parser<I, ? extends A> p1, Parser<I, ? extends A> p2) {
+    public static <I, A> Parser<I, A> choice(Parser<I, ? extends A> p1, Parser<I, ? extends A> p2) {
         return choice(IList.of(p1.cast(), p2.cast()));
     }
 
@@ -171,8 +139,7 @@ public abstract class Combinators {
      * @param <A> the parser result type
      * @return a parser that attempts one or more parsers in turn
      */
-    public static <I, A>
-    Parser<I, A> choice(Parser<I, ? extends A> p1, Parser<I, ? extends A> p2, Parser<I, ? extends A> p3) {
+    public static <I, A> Parser<I, A> choice(Parser<I, ? extends A> p1, Parser<I, ? extends A> p2, Parser<I, ? extends A> p3) {
         return choice(IList.of(p1.cast(), p2.cast(), p3.cast()));
     }
 
@@ -188,12 +155,7 @@ public abstract class Combinators {
      * @param <A> the parser result type
      * @return a parser that attempts one or more parsers in turn
      */
-    public static <I, A>
-    Parser<I, A> choice(
-            Parser<I, ? extends A> p1,
-            Parser<I, ? extends A> p2,
-            Parser<I, ? extends A> p3,
-            Parser<I, ? extends A> p4) {
+    public static <I, A> Parser<I, A> choice(Parser<I, ? extends A> p1, Parser<I, ? extends A> p2, Parser<I, ? extends A> p3, Parser<I, ? extends A> p4) {
         return choice(IList.of(p1.cast(), p2.cast(), p3.cast(), p4.cast()));
     }
 
@@ -210,13 +172,7 @@ public abstract class Combinators {
      * @param <A> the parser result type
      * @return a parser that attempts one or more parsers in turn
      */
-    public static <I, A>
-    Parser<I, A> choice(
-            Parser<I, ? extends A> p1,
-            Parser<I, ? extends A> p2,
-            Parser<I, ? extends A> p3,
-            Parser<I, ? extends A> p4,
-            Parser<I, ? extends A> p5) {
+    public static <I, A> Parser<I, A> choice(Parser<I, ? extends A> p1, Parser<I, ? extends A> p2, Parser<I, ? extends A> p3, Parser<I, ? extends A> p4, Parser<I, ? extends A> p5) {
         return choice(IList.of(p1.cast(), p2.cast(), p3.cast(), p4.cast(), p5.cast()));
     }
 
@@ -234,14 +190,7 @@ public abstract class Combinators {
      * @param <A> the parser result type
      * @return a parser that attempts one or more parsers in turn
      */
-    public static <I, A>
-    Parser<I, A> choice(
-            Parser<I, ? extends A> p1,
-            Parser<I, ? extends A> p2,
-            Parser<I, ? extends A> p3,
-            Parser<I, ? extends A> p4,
-            Parser<I, ? extends A> p5,
-            Parser<I, ? extends A> p6) {
+    public static <I, A> Parser<I, A> choice(Parser<I, ? extends A> p1, Parser<I, ? extends A> p2, Parser<I, ? extends A> p3, Parser<I, ? extends A> p4, Parser<I, ? extends A> p5, Parser<I, ? extends A> p6) {
         return choice(IList.of(p1.cast(), p2.cast(), p3.cast(), p4.cast(), p5.cast(), p6.cast()));
     }
 
@@ -254,31 +203,24 @@ public abstract class Combinators {
      * @param <A> the parser result type
      * @return a parser that attempts one or more parsers in turn
      */
-    public static <I, A> Parser<I, A> choice(IList.NonEmpty<Parser<I, A>> ps) {
-        // We use an iterative implementation for performance, and to avoid StackOverflowExceptions.
-        // The more concise recursive equivalent is ps.foldLeft1(Parser::or)
-        return new ParserImpl<>(
-                ps.map(Parser::acceptsEmpty).foldLeft1(Utils::or)
-        ) {
-            @Override
-            public Result<I, A> apply(Input<I> in) {
-                if (in.isEof()) {
-                    for (Parser<I, A> p : ps) {
-                        if (p.acceptsEmpty().get()) {
-                            return p.apply(in);
-                        }
-                    }
-                    return failureEof(this, in);
-                }
+    public static <I, A> Parser<I, A> choice(IList<Parser<I, A>> ps) {
+        return new Parser<>(ps.map(Parser::acceptsEmpty).foldLeft1(Utils::or), in -> {
+            if (in.isEof()) {
                 for (Parser<I, A> p : ps) {
-                    Result<I, A> result = p.apply(in);
-                    if (result.isSuccess()) {
-                        return result;
+                    if (p.acceptsEmpty().get()) {
+                        return p.apply(in);
                     }
                 }
-                return failure(in);
+                return Result.failureEof(in, "unexpected eof");
             }
-        };
+            for (Parser<I, A> p : ps) {
+                Result<I, A> result = p.apply(in);
+                if (result.isSuccess()) {
+                    return result;
+                }
+            }
+            return failure(in);
+        });
     }
 
     /**
@@ -291,12 +233,11 @@ public abstract class Combinators {
      * @return a parser that attempts one or more parsers in turn
      */
     @SafeVarargs
-    public static <I, A>
-    Parser<I, A> choice(Parser<I, A>... ps) {
+    public static <I, A> Parser<I, A> choice(Parser<I, A>... ps) {
         if (ps.length == 0) {
             throw new RuntimeException("Cannot construct a choice from an empty list of parsers");
         } else {
-            return choice((IList.NonEmpty<Parser<I, A>>) IList.ofArray(ps));
+            return choice(IList.ofArray(ps));
         }
     }
 }

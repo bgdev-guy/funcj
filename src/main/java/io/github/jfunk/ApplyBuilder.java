@@ -29,13 +29,28 @@ public class ApplyBuilder {
             this.pb = pb;
         }
 
+        /**
+         * Maps the results of the parsers to a new result using the provided function.
+         *
+         * @param f the function to map the results
+         * @param <R> the result type
+         * @return a new parser with the mapped result
+         */
         public <R> Parser<I, R> map(Function<A, Function<B, R>> f) {
             return Parser.ap(pa.map(f), pb);
         }
 
+        /**
+         * Maps the results of the parsers to a new result using the provided bi-function.
+         *
+         * @param f the bi-function to map the results
+         * @param <R> the result type
+         * @return a new parser with the mapped result
+         */
         public <R> Parser<I, R> map(BiFunction<A, B, R> f) {
             return map(a -> b -> f.apply(a, b));
         }
+
 
         public <C> ApplyBuilder2<I, A, B> andL(Parser<I, C> pc) {
             return new ApplyBuilder2<>(pa, pb.andL(pc));

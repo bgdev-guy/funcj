@@ -6,49 +6,52 @@ import java.util.function.Supplier;
 /**
  * A reference to a {@link Parser}.
  * <p>
- * At creation the reference is typically uninitialised.
+ * At creation, the reference is typically uninitialised.
  * Any of the {@code Parser} methods will throw if invoked on an uninitialised {@code Ref}.
- * It is subsequently initialised (via the {@link Ref#set(Parser)} method) with a {@code Parser}
+ * It is subsequently initialised (via the {@link Ref#set(Parser)} method) with a {@code Parser}.
  * {@code Ref} is typically used to allow parsers for grammars with circular
  * dependencies to be constructed.
  *
  * @param <I> input stream symbol type
  * @param <A> parser result type
  */
-public class Ref<I, A> implements Parser<I, A> {
+public class Ref<I, A> extends Parser<I, A> {
 
-    private Parser<I, A> impl;
+    private volatile Parser<I, A> impl = new Uninitialised<>();
+    private volatile boolean initialised = false;
 
-    Ref(Parser<I, A> impl) {
-        this.impl = Objects.requireNonNull(impl);
-    }
-
-    Ref() {
-        this.impl = Uninitialised.instance();
+    /**
+     * Constructs an uninitialised Ref.
+     * Any of the {@code Parser} methods will throw if invoked on an uninitialised {@code Ref}.
+     * The reference can be subsequently initialised via the {@link Ref#set(Parser)} method.
+     */
+    public Ref() {
+        super(() -> { throw error(); }, in -> { throw error(); });
     }
 
     /**
-     * Indicate if this reference is initialised.
+     * Indicates if this reference is initialised.
      *
      * @return true if this reference is initialised
      */
-    public boolean initialised() {
-        return impl != Uninitialised.instance();
+    public boolean isInitialised() {
+        return initialised;
     }
 
     /**
-     * Initialise this reference
+     * Initialises this reference with the given parser implementation.
      *
-     * @param impl the parser
+     * @param impl the parser implementation
      * @return this parser
+     * @throws IllegalStateException if the reference is already initialised
      */
-    public Parser<I, A> set(Parser<I, A> impl) {
-        if (this.impl != Uninitialised.INSTANCE) {
+    public synchronized Parser<I, A> set(Parser<I, A> impl) {
+        if (initialised) {
             throw new IllegalStateException("Ref is already initialised");
-        } else {
-            this.impl = Objects.requireNonNull(impl);
-            return this;
         }
+        this.impl = Objects.requireNonNull(impl);
+        this.initialised = true;
+        return this;
     }
 
     @Override
@@ -61,25 +64,18 @@ public class Ref<I, A> implements Parser<I, A> {
         return impl.apply(in);
     }
 
-    protected enum Uninitialised implements Parser<Object, Object> {
-        INSTANCE {
-            @Override
-            public Supplier<Boolean> acceptsEmpty() {
-                throw error();
-            }
+    private static RuntimeException error() {
+        return new RuntimeException("Uninitialised Parser reference");
+    }
 
-            public Result<Object, Object> apply(Input<Object> in) {
-                throw error();
-            }
-        };
+    protected static class Uninitialised<I, A> extends Parser<I, A> {
 
-        private static RuntimeException error() {
-            return new RuntimeException("Uninitialised Supplier Parser reference");
+        private Uninitialised() {
+            super(() -> { throw error(); }, in -> { throw error(); });
         }
 
-        @SuppressWarnings("unchecked")
-        static <I, A> Parser<I, A> instance() {
-            return (Parser<I, A>) INSTANCE;
+        private static RuntimeException error() {
+            return new RuntimeException("Uninitialised Parser reference");
         }
     }
 }

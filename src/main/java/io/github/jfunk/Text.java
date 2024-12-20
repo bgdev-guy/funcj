@@ -129,7 +129,7 @@ public abstract class Text {
         return switch (s.length()) {
             case 0 -> Combinators.fail();
             case 1 -> chr(s.charAt(0)).map(Object::toString);
-            default -> new ParserImpl<>(() -> false) {
+            default -> new Parser<>(() -> false) {
                 @Override
                 public Result<Character, String> apply(Input<Character> in) {
                     for (int i = 0; i < s.length(); ++i) {

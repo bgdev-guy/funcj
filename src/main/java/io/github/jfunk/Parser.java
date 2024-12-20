@@ -14,7 +14,6 @@ import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 import java.util.stream.Stream;
 
-import static io.github.jfunk.Parser.pure;
 import static io.github.jfunk.Utils.LTRUE;
 import static io.github.jfunk.Utils.failureEof;
 
@@ -25,55 +24,55 @@ import static io.github.jfunk.Utils.failureEof;
  * @param <I> the input stream symbol type
  * @param <A> the parser result type
  */
-public interface Parser<I, A> {
+public class Parser<I, A> {
+
+    Supplier<Boolean> acceptsEmpty;
+    Function<Input<I>,Result<I,A>> applyHandler;
+
+    public Parser(Supplier<Boolean> acceptsEmpty, Function<Input<I>,Result<I,A>> applyHandler) {
+        this.acceptsEmpty = acceptsEmpty;
+        this.applyHandler = applyHandler;
+    }
+
+    public Parser(Supplier<Boolean> acceptsEmpty) {
+        this(acceptsEmpty, Utils::failure);
+    }
+
+    public Parser() {
+    }
+
 
     /**
-     * Construct an uninitialised parser reference object.
+     * Construct an uninitialized parser reference object.
      *
      * @param <I> the input stream symbol type
      * @param <A> the parser result type
-     * @return the uninitialised parser reference
+     * @return the uninitialized parser reference
      */
-    static <I, A> Ref<I, A> ref() {
+    public static <I, A> Ref<I, A> ref() {
         return new Ref<>();
     }
 
     /**
-     * Construct a parser reference object from a parser.
-     *
-     * @param <I> the input stream symbol type
-     * @param <A> the parser result type
-     * @param p   the parser
-     * @return the initialised parser reference
-     */
-    static <I, A> Ref<I, A> ref(Parser<I, A> p) {
-        return new Ref<>(p);
-    }
-
-    /**
      * Applicative unit/pure function.
-     * Construct a parser that always returns the given value, without consuming any input.
+     * Constructs a parser that always returns the given value, without consuming any input.
      *
-     * @param a   the value
+     * @param a   the value to be returned by the parser
      * @param <I> the input stream symbol type
      * @param <A> the parser result type
      * @return a parser that always returns the given value
+     * @throws IllegalArgumentException if the provided value is null
      */
-    static <I, A> Parser<I, A> pure(A a) {
-        return new ParserImpl<>(LTRUE) {
-            @Override
-            public Result<I, A> apply(Input<I> in) {
-                return Result.success(a, in);
-            }
-        };
+    public static <I, A> Parser<I, A> pure(A a) {
+        if (a == null) {
+            throw new IllegalArgumentException("The provided value cannot be null");
+        }
+        return new Parser<>(LTRUE, in -> Result.success(a, in));
     }
 
     /**
-     * Construct a parser that, if {@code pf} succeeds, yielding a function {@code f},
-     * and if {@code pa} succeeds, yielding a value {@code a},
-     * then it returns the result of applying function {@code f} to value {@code a}.
-     * Otherwise, if {@code pf} fails then the parser returns the failure,
-     * else if {@code pa} fails then it returns that failure.
+     * Constructs a parser that applies a function parser to a value parser.
+     * If both parsers succeed, the result is the application of the function to the value.
      *
      * @param pf  the parser that returns a function result
      * @param pa  the parser that returns a value result
@@ -82,8 +81,8 @@ public interface Parser<I, A> {
      * @param <B> the return type of the function
      * @return a parser that returns the result of applying the parsed function to the parsed value
      */
-    static <I, A, B> Parser<I, B> ap(Parser<I, Function<A, B>> pf, Parser<I, A> pa) {
-        return new ParserImpl<>(
+    public static <I, A, B> Parser<I, B> ap(Parser<I, Function<A, B>> pf, Parser<I, A> pa) {
+        return new Parser<>(
                 Utils.and(pf.acceptsEmpty(), pa.acceptsEmpty())
         ) {
             @Override
@@ -105,41 +104,37 @@ public interface Parser<I, A> {
                     return (Result<I, B>) r2;
                 }
                 return ((Result.Failure<I, Function<A, B>>) r).cast();
-
             }
         };
     }
 
     /**
-     * Construct a parser that, if {@code pa} succeeds, yielding a function {@code a},
-     * then it returns the result of applying function {@code f} to value {@code a}.
-     * If {@code pa} fails then the parser returns the failure.
+     * Constructs a parser that applies a function to the result of another parser.
+     * If the parser succeeds, the result is the application of the function to the parsed value.
      *
-     * @param f   the function
+     * @param f   the function to be applied to the parsed value
      * @param pa  the parser that returns a value result
      * @param <I> the input stream symbol type
      * @param <A> the input type of the function
      * @param <B> the return type of the function
      * @return a parser that returns the result of applying the function to the parsed value
      */
-    static <I, A, B>
-    Parser<I, B> ap(Function<A, B> f, Parser<I, A> pa) {
+    public static <I, A, B> Parser<I, B> ap(Function<A, B> f, Parser<I, A> pa) {
         return ap(pure(f), pa);
     }
 
     /**
      * Standard applicative traversal.
-     * <p>
-     * Equivalent to <pre>sequence(lt.map(f))</pre>.
+     * Translates a list of values into a parser that returns a list of parsed values.
      *
      * @param lt  the list of values
      * @param f   the function to be applied to each value in the list
-     * @param <I> the error type
+     * @param <I> the input stream symbol type
      * @param <T> the type of list elements
-     * @param <U> the type wrapped by the {@code Try} returned by the function
-     * @return a {@code Parser} which wraps an {@link IList} of values
+     * @param <U> the type of the parser result
+     * @return a parser that returns a list of parsed values
      */
-    static <I, T, U> Parser<I, IList<U>> traverse(IList<T> lt, Function<T, Parser<I, U>> f) {
+    public static <I, T, U> Parser<I, IList<U>> traverse(IList<T> lt, Function<T, Parser<I, U>> f) {
         return lt.foldRight(
                 (t, plu) -> ap(plu.map(lu -> lu::add), f.apply(t)),
                 pure(IList.empty())
@@ -148,16 +143,14 @@ public interface Parser<I, A> {
 
     /**
      * Standard applicative sequencing.
-     * <p>
-     * Translate a {@link IList} of {@code Parser} into a {@code Parser} of an {@code IList},
-     * by composing each consecutive {@code Parser} using the {@link Parser#ap(Parser, Parser)} method.
+     * Translates a list of parsers into a parser that returns a list of parsed values.
      *
-     * @param lpt the list of {@code Parser} values
-     * @param <I> the error type
-     * @param <T> the value type of the {@code Parser}s in the list
-     * @return a {@code Parser} which wraps an {@link IList} of values
+     * @param lpt the list of parsers
+     * @param <I> the input stream symbol type
+     * @param <T> the type of the parser result
+     * @return a parser that returns a list of parsed values
      */
-    static <I, T> Parser<I, IList<T>> sequence(IList<Parser<I, T>> lpt) {
+    public static <I, T> Parser<I, IList<T>> sequence(IList<Parser<I, T>> lpt) {
         return lpt.foldRight(
                 (pt, plt) -> ap(plt.map(lt -> lt::add), pt),
                 pure(IList.empty())
@@ -165,14 +158,15 @@ public interface Parser<I, A> {
     }
 
     /**
-     * Variation of {@link Parser#sequence(IList)} for {@link Stream}.
+     * Variation of {@link Parser#sequence(IList)} for streams.
+     * Translates a stream of parsers into a parser that returns a stream of parsed values.
      *
-     * @param spt the stream of {@code Parser} values
-     * @param <E> the error type
-     * @param <T> the value type of the {@code Parser}s in the stream
-     * @return a {@code Parser} which wraps an {@link Stream} of values
+     * @param spt the stream of parsers
+     * @param <E> the input stream symbol type
+     * @param <T> the type of the parser result
+     * @return a parser that returns a stream of parsed values
      */
-    static <E, T> Parser<E, Stream<T>> sequence(Stream<Parser<E, T>> spt) {
+    public static <E, T> Parser<E, Stream<T>> sequence(Stream<Parser<E, T>> spt) {
         final Iterator<Parser<E, T>> iter = spt.iterator();
         Parser<E, IList<T>> plt = pure(IList.empty());
         while (iter.hasNext()) {
@@ -183,12 +177,12 @@ public interface Parser<I, A> {
     }
 
     /**
-     * Apply this parser to the input stream. Fail if eof isn't reached.
+     * Apply this parser to the input stream. Fail if EOF isn't reached.
      *
      * @param in the input stream
      * @return the parser result
      */
-    default Result<I, A> parse(Input<I> in) {
+    public Result<I, A> parse(Input<I> in) {
         final Parser<I, A> parserAndEof = this.andL(Combinators.eof());
         if (acceptsEmpty().get()) {
             return parserAndEof.apply(in);
@@ -199,11 +193,16 @@ public interface Parser<I, A> {
     }
 
     /**
-     * Indicate whether this parser accepts the empty symbol.
+     * Indicates whether this parser accepts empty input.
      *
-     * @return a supplier for true if the parser accepts the empty symbol
+     * @return a supplier that returns true if the parser accepts empty input
      */
-    Supplier<Boolean> acceptsEmpty();
+    public Supplier<Boolean> acceptsEmpty() {
+        if (applyHandler == null){
+            throw new RuntimeException("Uninitialised Parser");
+        }
+        return acceptsEmpty;
+    }
 
     /**
      * Apply this parser to the input stream.
@@ -213,24 +212,33 @@ public interface Parser<I, A> {
      * @param in the input stream
      * @return the parser result
      */
-    Result<I, A> apply(Input<I> in);
-
+    public Result<I, A> apply(Input<I> in) {
+        if (applyHandler == null){
+            throw new RuntimeException("Uninitialised Parser");
+        }
+        return applyHandler.apply(in);
+    }
+    /**
+     * Cast this parser to another type.
+     *
+     * @param <B> the target type
+     * @return the casted parser
+     */
     @SuppressWarnings("unchecked")
-    default <B> Parser<I, B> cast() {
+    public <B> Parser<I, B> cast() {
         return (Parser<I, B>) this;
     }
 
     /**
-     * Construct a parser that, if this parser succeeds then returns the result
-     * of applying the function {@code f} to the result,
-     * otherwise return the failure.
+     * Constructs a parser that applies a function to the result of this parser.
+     * If this parser succeeds, the result is the application of the function to the parsed value.
      *
      * @param f   the function to be mapped over this parser
      * @param <B> the function return type
-     * @return a parser that returns {@code f} mapped over this parser's result
+     * @return a parser that returns the function applied to this parser's result
      */
-    default <B> Parser<I, B> map(Function<A, B> f) {
-        return new ParserImpl<>(
+    public <B> Parser<I, B> map(Function<A, B> f) {
+        return new Parser<>(
                 Parser.this.acceptsEmpty()
         ) {
             @Override
@@ -241,16 +249,16 @@ public interface Parser<I, A> {
     }
 
     /**
-     * Construct a parser which returns the result of either this parser or,
-     * if it fails, then the result of the {@code rhs} parser.
+     * Constructs a parser that returns the result of either this parser or,
+     * if it fails, the result of the {@code rhs} parser.
      *
      * @param rhs the second parser to attempt
      * @param <B> the rhs parser result type
-     * @return a parser which returns the result of either this parser or the {@code rhs} parser.
+     * @return a parser that returns the result of either this parser or the {@code rhs} parser
      */
     @SuppressWarnings("unchecked")
-    default <B extends A> Parser<I, A> or(Parser<I, B> rhs) {
-        return new ParserImpl<>(
+    public <B extends A> Parser<I, A> or(Parser<I, B> rhs) {
+        return new Parser<>(
                 Utils.or(Parser.this.acceptsEmpty(), rhs.acceptsEmpty())
         ) {
             @Override
@@ -273,68 +281,57 @@ public interface Parser<I, A> {
     }
 
     /**
-     * Combine this parser with another to form a builder which accumulates the parse results.
+     * Combines this parser with another to form a builder that accumulates the parse results.
      *
      * @param pb  the second parser
-     * @param <B> the result type of second parser
-     * @return an {@link ApplyBuilder} which accumulates the parse results.
+     * @param <B> the result type of the second parser
+     * @return an {@link ApplyBuilder} that accumulates the parse results
      */
-    default <B> ApplyBuilder.ApplyBuilder2<I, A, B> and(Parser<I, B> pb) {
+    public <B> ApplyBuilder.ApplyBuilder2<I, A, B> and(Parser<I, B> pb) {
         return new ApplyBuilder.ApplyBuilder2<>(this, pb);
     }
 
     /**
-     * Combine this parser with another to form a parser which applies two parsers,
-     * and if they are both successful
-     * throws away the result of the right-hand parser,
-     * and returns the result of the left-hand parser
+     * Combines this parser with another to form a parser that applies two parsers,
+     * and if both are successful, returns the result of the left-hand parser.
      *
      * @param pb  the second parser
-     * @param <B> the result type of second parser
+     * @param <B> the result type of the second parser
      * @return a parser that applies two parsers consecutively and returns the result of the first
      */
-    default <B> Parser<I, A> andL(Parser<I, B> pb) {
+    public <B> Parser<I, A> andL(Parser<I, B> pb) {
         return this.and(pb).map((a, b) -> a);
     }
 
     /**
-     * Combine this parser with another to form a parser which applies two parsers,
-     * and if they are both successful
-     * throws away the result of the left-hand parser
-     * and returns the result of the right-hand parser
+     * Combines this parser with another to form a parser that applies two parsers,
+     * and if both are successful, returns the result of the right-hand parser.
      *
      * @param pb  the second parser
-     * @param <B> the result type of second parser
+     * @param <B> the result type of the second parser
      * @return a parser that applies two parsers consecutively and returns the result of the second
      */
-    default <B> Parser<I, B> andR(Parser<I, B> pb) {
+    public <B> Parser<I, B> andR(Parser<I, B> pb) {
         return this.and(pb).map((a, b) -> b);
     }
 
     /**
-     * A parser which repeatedly applies this parser until it fails,
-     * and then returns an {@link IList} of the results.
-     * If this parser fails on the first attempt then the parser succeeds,
-     * with an empty list of results.
+     * A parser that repeatedly applies this parser until it fails,
+     * and then returns a list of the results.
+     * If this parser fails on the first attempt, the parser succeeds with an empty list.
      *
-     * @return a parser which applies this parser zero or more times until it fails
+     * @return a parser that applies this parser zero or more times until it fails
      */
-    default Parser<I, IList<A>> many() {
-        // We want to provide an alert at construction time if the caller attempts to create a many
-        // parser from one that accepts empty (which would lead to an infinite loop at parsing time).
-        // But, an uninitialised Ref will throw an exception if we call acceptsEmpty,
-        // so for that particular case we have to skip the check.
-        if (Utils.ifRefClass(this).map(Ref::initialised).orElse(true)
+    public Parser<I, IList<A>> many() {
+        if (Utils.ifRefClass(this).map(Ref::isInitialised).orElse(true)
                 && acceptsEmpty().get()) {
             throw new RuntimeException("Cannot construct a many parser from one that accepts empty");
         }
 
-        // We use an iterative implementation, in favour of a more concise recursive solution,
-        // for performance, and to avoid StackOverflowExceptions.
-        return new ParserImpl<>(LTRUE) {
+        return new Parser<>(LTRUE) {
             @Override
             public Result<I, IList<A>> apply(Input<I> in) {
-                IList<A> accumulator = IList.of();
+                IList<A> accumulator = IList.empty();
                 while (true) {
                     if (!in.isEof()) {
                         final Result<I, A> r = Parser.this.apply(in);
@@ -353,19 +350,18 @@ public interface Parser<I, A> {
     }
 
     /**
-     * A parser which repeatedly applies this parser until the end parser succeeds,
-     * and then returns an {@link IList} of the results.
+     * A parser that repeatedly applies this parser until the end parser succeeds,
+     * and then returns a list of the results.
      *
      * @param end the end parser
      * @param <B> the result type of the end parser
-     * @return a parser which applies this parser zero or more times until end succeeds
+     * @return a parser that applies this parser zero or more times until the end parser succeeds
      */
-    default <B> Parser<I, IList<A>> manyTill(Parser<I, B> end) {
-        return new ParserImpl<>(
-                end.acceptsEmpty()) {
-            @Override
+    public <B> Parser<I, IList<A>> manyTill(Parser<I, B> end) {
+        return new Parser<>(end.acceptsEmpty()) {
+
             public Result<I, IList<A>> apply(Input<I> in) {
-                IList<A> acc = IList.of();
+                IList<A> acc = IList.empty();
                 while (true) {
                     if (!in.isEof()) {
                         Result<I, B> r = end.apply(in);
@@ -390,78 +386,73 @@ public interface Parser<I, A> {
     }
 
     /**
-     * A parser which applies this parser one or more times until it fails,
-     * and then returns an {@link IList} of the results.
-     * Note, if this parser fails on the first attempt then the parser fails.
+     * A parser that applies this parser one or more times until it fails,
+     * and then returns a non-empty list of the results.
+     * If this parser fails on the first attempt, the parser fails.
      *
-     * @return a parser which applies this parser repeatedly until it fails
+     * @return a parser that applies this parser repeatedly until it fails
      */
-    default Parser<I, IList.NonEmpty<A>> many1() {
+    public Parser<I, IList<A>> many1() {
         return this.and(this.many())
                 .map(a -> l -> l.add(a));
     }
 
     /**
-     * A parser which applies this parser zero or more times until it fails,
-     * and throws away the results.
-     * Note, if this parser fails on the first attempt then the parser succeeds.
+     * A parser that applies this parser zero or more times until it fails,
+     * and discards the results.
+     * If this parser fails on the first attempt, the parser succeeds.
      *
-     * @return a parser which applies this parser repeatedly until it fails
+     * @return a parser that applies this parser repeatedly until it fails
      */
-    default Parser<I, Unit> skipMany() {
+    public Parser<I, Unit> skipMany() {
         return this.many()
                 .map(u -> Unit.UNIT);
     }
 
     /**
-     * A parser which applies this parser zero or more times until it fails,
-     * alternating with calls to the {@code sep} parser.
-     * The results of this parser are collected in a {@link IList}
-     * and returned by the parser.
+     * A parser that applies this parser zero or more times until it fails,
+     * alternating with calls to the separator parser.
+     * The results of this parser are collected in a list and returned by the parser.
      *
      * @param sep   the separator parser
      * @param <SEP> the separator type
-     * @return a parser which applies this parser zero or more times alternated with {@code sep}
+     * @return a parser that applies this parser zero or more times alternated with the separator parser
      */
-    default <SEP> Parser<I, IList<A>> sepBy(Parser<I, SEP> sep) {
-        // the cast is needed so both branches of the 'or' return the same type
+    public <SEP> Parser<I, IList<A>> sepBy(Parser<I, SEP> sep) {
         return this.sepBy1(sep).map(l -> (IList<A>) l)
                 .or(pure(IList.empty()));
     }
 
     /**
-     * A parser which applies this parser one or more times until it fails,
-     * alternating with calls to the {@code sep} parser.
-     * The results of this parser are collected in a {@link IList}
-     * and returned by the parser.
+     * A parser that applies this parser one or more times until it fails,
+     * alternating with calls to the separator parser.
+     * The results of this parser are collected in a non-empty list and returned by the parser.
      *
      * @param sep   the separator parser
      * @param <SEP> the separator type
-     * @return a parser which applies this parser one or more times alternated with {@code sep}
+     * @return a parser that applies this parser one or more times alternated with the separator parser
      */
-    default <SEP> Parser<I, IList.NonEmpty<A>> sepBy1(Parser<I, SEP> sep) {
+    public <SEP> Parser<I, IList<A>> sepBy1(Parser<I, SEP> sep) {
         return this.and(sep.andR(this).many())
                 .map(a -> l -> l.add(a));
     }
 
     /**
-     * A parser that applies this parser, and, if it succeeds,
+     * A parser that applies this parser, and if it succeeds,
      * returns the result wrapped in an {@link Optional},
      * otherwise returns an empty {@code Optional}.
      *
-     * @return an optional parser
+     * @return a parser that returns an optional result
      */
-    default Parser<I, Optional<A>> optional() {
+    public Parser<I, Optional<A>> optional() {
         return this.map(Optional::of)
                 .or(pure(Optional.empty()));
     }
 
     /**
      * A parser for expressions with enclosing symbols.
-     * <p>
-     * A parser which applies the {@code open} parser, then this parser,
-     * and then {@code close} parser.
-     * If all three succeed then the result of this parser is returned.
+     * Applies the open parser, then this parser, and then the close parser.
+     * If all three succeed, the result of this parser is returned.
      *
      * @param open    the open symbol parser
      * @param close   the close symbol parser
@@ -469,10 +460,7 @@ public interface Parser<I, A> {
      * @param <CLOSE> the close parser result type
      * @return a parser for expressions with enclosing symbols
      */
-    default <OPEN, CLOSE>
-    Parser<I, A> between(
-            Parser<I, OPEN> open,
-            Parser<I, CLOSE> close) {
+    public <OPEN, CLOSE> Parser<I, A> between(Parser<I, OPEN> open, Parser<I, CLOSE> close) {
         return open.andR(this).andL(close);
     }
 
@@ -482,21 +470,19 @@ public interface Parser<I, A> {
      *
      * @param op the parser for the operator
      * @param a  the value to return if there are no operands
-     * @return a parser for operator expressions
+     * @return a parser for right-associative operator expressions
      */
-
-    default Parser<I, A> chainr(Parser<I, BinaryOperator<A>> op, A a) {
+    public Parser<I, A> chainr(Parser<I, BinaryOperator<A>> op, A a) {
         return this.chainr1(op).or(pure(a));
     }
 
     /**
-     * A parser for an operand, followed by one or more operands that are separated by operators.
-     * The operators are right-associative.
+     * Parse right-associative operator expressions.
      *
-     * @param op the parser for the operator
-     * @return a parser for operator expressions
+     * @param op  the parser for the binary operator
+     * @return a parser that parses right-associative operator expressions
      */
-    default Parser<I, A> chainr1(Parser<I, BinaryOperator<A>> op) {
+    public Parser<I, A> chainr1(Parser<I, BinaryOperator<A>> op) {
         return this.and(
                 op.and(this)
                         .map(Tuple::of)
@@ -505,29 +491,23 @@ public interface Parser<I, A> {
     }
 
     /**
-     * A parser for an operand, followed by zero or more operands that are separated by operators.
-     * The operators are left-associative.
-     * This can, for example, be used to eliminate left recursion
-     * which typically occurs in expression grammars.
+     * Parse right-associative operator expressions with an initial value.
      *
-     * @param op the parser for the operator
-     * @param a  the value to return if there are no operands
-     * @return a parser for operator expressions
+     * @param op  the parser for the binary operator
+     * @param a   the initial value
+     * @return a parser that parses right-associative operator expressions with an initial value
      */
-    default Parser<I, A> chainl(Parser<I, BinaryOperator<A>> op, A a) {
+    public Parser<I, A> chainl(Parser<I, BinaryOperator<A>> op, A a) {
         return this.chainl1(op).or(pure(a));
     }
 
     /**
-     * A parser for an operand, followed by one or more operands that are separated by operators.
-     * The operators are left-associative.
-     * This can, for example, be used to eliminate left recursion
-     * which typically occurs in expression grammars.
+     * Parse left-associative operator expressions.
      *
-     * @param op the parser for the operator
-     * @return a parser for operator expressions
+     * @param op  the parser for the binary operator
+     * @return a parser that parses left-associative operator expressions
      */
-    default Parser<I, A> chainl1(Parser<I, BinaryOperator<A>> op) {
+    public Parser<I, A> chainl1(Parser<I, BinaryOperator<A>> op) {
         final Parser<I, UnaryOperator<A>> plo =
                 op.and(this)
                         .map((f, y) -> x -> f.apply(x, y));
