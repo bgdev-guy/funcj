@@ -135,9 +135,8 @@ public class Parser<I, A> {
      * @return a parser that returns a list of parsed values
      */
     public static <I, T, U> Parser<I, IList<U>> traverse(IList<T> lt, Function<T, Parser<I, U>> f) {
-        return lt.foldRight(
-                (t, plu) -> ap(plu.map(lu -> lu::add), f.apply(t)),
-                pure(IList.empty())
+        return lt.foldRight(pure(IList.empty()),
+                (t, plu) -> ap(plu.map(lu -> lu::add), f.apply(t))
         );
     }
 
@@ -152,8 +151,8 @@ public class Parser<I, A> {
      */
     public static <I, T> Parser<I, IList<T>> sequence(IList<Parser<I, T>> lpt) {
         return lpt.foldRight(
-                (pt, plt) -> ap(plt.map(lt -> lt::add), pt),
-                pure(IList.empty())
+                pure(IList.empty()),
+                (pt, plt) -> ap(plt.map(lt -> lt::add), pt)
         );
     }
 
@@ -512,6 +511,6 @@ public class Parser<I, A> {
                 op.and(this)
                         .map((f, y) -> x -> f.apply(x, y));
         return this.and(plo.many())
-                .map((a, lf) -> lf.foldLeft((acc, f) -> f.apply(acc), a));
+                .map((a, lf) -> lf.foldLeft(a,(acc, f) -> f.apply(acc)));
     }
 }

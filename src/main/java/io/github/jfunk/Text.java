@@ -60,7 +60,7 @@ public abstract class Text {
             nonZeroDigit.and(digit.many())
                     .map(d -> ds -> ds.add(d))
                     .map(ds -> ds.map(Text::digitToInt))
-                    .map(ds -> ds.foldLeft((acc, x) -> acc * 10L + x, 0L));
+                    .map(ds -> ds.foldLeft(0L,(acc, x) -> acc * 10L + x));
     /**
      * A parser for an unsigned long.
      */
@@ -74,7 +74,7 @@ public abstract class Text {
     private static final Parser<Character, Double> floating =
             digit.many()
                     .map(ds -> ds.map(Text::digitToInt))
-                    .map(l -> l.foldRight((d, acc) -> d + acc / 10.0, 0.0) / 10.0);
+                    .map(l -> l.foldRight(0.0,(d, acc) -> d + acc / 10.0) / 10.0);
     /**
      * A parser for a floating point number.
      */

@@ -1,20 +1,18 @@
 package io.github.jfunk.data;
 
-
 import io.github.jfunk.functions.BiFunctionFlipper;
 import io.github.jfunk.functions.BinaryOperatorFlipper;
 
 import java.util.*;
-import java.util.function.BinaryOperator;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
 /**
  * Simple recursive, immutable linked list.
  * <p>
- * Each {@code IList} is either {@link } or it is {@link IList},
- * in which case it has a head element value and a tail.
+ * Each {@code IList} is either empty or it has a head element value and a tail.
  * The tail is itself an {@code IList}.
  * Null elements are not allowed.
  *
@@ -24,20 +22,21 @@ public class IList<T> implements Iterable<T> {
 
     private final T head;
     private final IList<T> tail;
-    private boolean isEmpty= true;
+    private final boolean isEmpty;
 
     // Static Empty instance
     private static final IList<?> EMPTY = new IList<>();
 
-    public IList(T head, IList<T> tail) {
+    private IList() {
+        this.head = null;
+        this.tail = null;
+        this.isEmpty = true;
+    }
+
+    private IList(T head, IList<T> tail) {
         this.head = Objects.requireNonNull(head);
         this.tail = Objects.requireNonNull(tail);
         this.isEmpty = false;
-    }
-
-    public IList() {
-        this.head = null;
-        this.tail = null;
     }
 
     /**
@@ -52,16 +51,6 @@ public class IList<T> implements Iterable<T> {
     }
 
     /**
-     * Construct an empty list.
-     *
-     * @param <T> the element type
-     * @return an empty list
-     */
-    public static <T> IList<T> of() {
-        return empty();
-    }
-
-    /**
      * Construct a list with one element.
      *
      * @param elem element
@@ -69,7 +58,7 @@ public class IList<T> implements Iterable<T> {
      * @return the new list with one element
      */
     public static <T> IList<T> of(T elem) {
-        return new IList<T>().add(elem);
+        return new IList<>(elem, empty());
     }
 
     /**
@@ -82,22 +71,8 @@ public class IList<T> implements Iterable<T> {
      */
     @SafeVarargs
     public static <T> IList<T> of(T elem, T... elems) {
-        return ofArray(elems).add(elem);
-    }
-
-    /**
-     * Construct a list from an {@link Iterable} collection of elements.
-     *
-     * @param elems the iterable collection of elements
-     * @param <T>   the element type
-     * @return the new list with multiple elements
-     */
-    public static <T> IList<T> ofIterable(Iterable<T> elems) {
-        IList<T> r = empty();
-        for (T elem : elems) {
-            r = r.add(elem);
-        }
-        return r.reverse();
+        IList<T> list = ofArray(elems);
+        return list.add(elem);
     }
 
     /**
@@ -108,56 +83,11 @@ public class IList<T> implements Iterable<T> {
      * @return the new list with multiple elements
      */
     public static <T> IList<T> ofArray(T[] elems) {
-        IList<T> r = empty();
+        IList<T> list = empty();
         for (int i = elems.length - 1; i >= 0; --i) {
-            r = r.add(elems[i]);
+            list = list.add(elems[i]);
         }
-        return r;
-    }
-
-    /**
-     * Concatenate two lists to form a new list
-     *
-     * @param l1  the first list
-     * @param l2  the second list
-     * @param <T> the element type
-     * @return the new concatenated list
-     */
-    public static <T> IList<T> concat(IList<? extends T> l1, IList<? extends T> l2) {
-        @SuppressWarnings("unchecked")
-        IList<T> r = (IList<T>) l2;
-        for (T elem : l1.reverse()) {
-            r = r.add(elem);
-        }
-        return r;
-    }
-
-    /**
-     * Convert a list of {@link Character}s into a {@link String}.
-     *
-     * @param l the list of {@code Character}s
-     * @return a {@code String}
-     */
-    public static String listToString(IList<Character> l) {
-        final StringBuilder sb = new StringBuilder(l.size());
-        for (; !l.isEmpty(); l = l.tail()) {
-            sb.append(l.head());
-        }
-        return sb.toString();
-    }
-
-    /**
-     * Convert a {@link String} into a list of {@link Character}s.
-     *
-     * @param s the {@code String}
-     * @return a list of {@code Character}s
-     */
-    public static IList<Character> stringToList(String s) {
-        IList<Character> r = empty();
-        for (int i = s.length() - 1; i >= 0; --i) {
-            r = r.add(s.charAt(i));
-        }
-        return r;
+        return list;
     }
 
     /**
@@ -167,371 +97,229 @@ public class IList<T> implements Iterable<T> {
      * @return the new list
      */
     public IList<T> add(T head) {
-        return new IList<T>(head, this);
+        return new IList<>(head, this);
     }
 
     /**
-     * Create a new list by adding multiple elements to the head of this list.
+     * Return true if this list is empty otherwise false
      *
-     * @param l   the list to be added to the head of this list
-     * @param <S> the list element type
-     * @return the new list
+     * @return true if this list is empty otherwise false
      */
-    public <S extends T> IList<T> addAll(IList<S> l) {
-        IList<T> r = this;
-        for (IList<S> next = l.reverse(); !next.isEmpty(); next = next.tail()) {
-            r = r.add(next.head());
-        }
-        return r;
-    }
-
     public boolean isEmpty() {
         return isEmpty;
     }
 
-
+    /**
+     * Return the head element of this list.
+     *
+     * @return the head of this list.
+     * @throws UnsupportedOperationException if the list is empty.
+     */
     public T head() {
-        if (isEmpty){
+        if (isEmpty) {
             throw new UnsupportedOperationException("Cannot take the head of an empty list");
         }
         return head;
     }
 
+    /**
+     * Return the tail of this list.
+     *
+     * @return the tail of this list.
+     * @throws UnsupportedOperationException if the list is empty.
+     */
     public IList<T> tail() {
-        if (isEmpty){
+        if (isEmpty) {
             throw new UnsupportedOperationException("Cannot take the tail of an empty list");
         }
         return tail;
     }
 
+    /**
+     * Returns the element at the specified position in this list.
+     *
+     * @param index the position of the element to return
+     * @return the element of this list at the specified position.
+     * @throws IndexOutOfBoundsException if the index is out of bounds.
+     */
     public T get(int index) {
-        if (isEmpty) {
-            throw new IndexOutOfBoundsException("Index " + index + " out of bounds for an empty list");
-        }
         if (index < 0) {
             throw new IndexOutOfBoundsException("Index " + index + " out of bounds");
-        }
-        if (index == 0) {
-            return head;
-        }
-        IList<T> next = tail;
-        for (int i = 1; i < index; ++i) {
-            if (next.isEmpty()) {
-                throw new IndexOutOfBoundsException("Index " + index + " out of bounds");
-            } else {
-                next = next.tail;
-            }
-        }
-        if (next.isEmpty()) {
-            throw new IndexOutOfBoundsException("Index " + index + " out of bounds");
+        } else if (index == 0) {
+            return head();
         } else {
-            return next.head;
+            return tail().get(index - 1);
         }
-
-    }
-
-    @Override
-    public String toString() {
-        final StringBuilder r = new StringBuilder("[");
-        append(r).setCharAt(r.length() - 1, ']');
-        return r.toString();
-    }
-
-    public StringBuilder append(StringBuilder sb) {
-        if (isEmpty) {
-            return sb;
-        }
-        return tail.append(sb.append(head).append(','));
     }
 
     /**
-     * List equality.
+     * Reverse the list.
      *
-     * @return true if this list and rhs are equal in terms of their size and elements.
+     * @return a new list with the elements in reverse order
      */
-    @Override
-    @SuppressWarnings("unchecked")
-    public boolean equals(Object rhs) {
-        return this == rhs ||
-                (rhs != null &&
-                        getClass() == rhs.getClass() &&
-                        equals((IList<T>) rhs));
-    }
-
-    @Override
-    public int hashCode() {
-        if (isEmpty) {
-            return 0;
-        }
-        int hashCode = 1;
-        for (T t : this)
-            hashCode = 31 * hashCode + Objects.hashCode(t);
-        return hashCode;
-    }
-
-    public boolean equals(IList<T> rhs) {
-        if (this.isEmpty()) {
-            return rhs.isEmpty();
-        }
-        if (rhs.isEmpty()) {
-            return false;
-        } else {
-            for (T lhs : this) {
-                if (rhs.isEmpty() || !lhs.equals(rhs.head())) {
-                    return false;
-                }
-
-                rhs = rhs.tail();
-            }
-
-            return rhs.isEmpty();
-        }
-    }
-
-    public <S> S match(Function<IList<T>, S> first, Function<IList<T>, S> second) {
-        if (isEmpty) {
-            return second.apply(this);
-        }
-        return first.apply(this);
-    }
-
-    public IList<T> appendAll(IList<T> l) {
-        if (isEmpty) {
-            return l;
-        }
-        return new IList<>(head, tail.appendAll(l));
-    }
-
-    public int size() {
-        IList<T> pos = this;
-        int length = 0;
-        while (!pos.isEmpty()) {
-            ++length;
-            pos = pos.tail();
-        }
-
-        return length;
-    }
-
     public IList<T> reverse() {
-        if (isEmpty) {
-            return this;
+        IList<T> reversed = empty();
+        IList<T> current = this;
+        while (!current.isEmpty()) {
+            reversed = reversed.add(current.head());
+            current = current.tail();
         }
-        IList<T> r = IList.of();
-        for (IList<T> n = this; !n.isEmpty(); n = n.tail()) {
-            r = r.add(n.head());
-        }
-        return r;
-    }
-
-    public <U> IList<U> map(Function<? super T, ? extends U> f) {
-        if(isEmpty){
-            return empty();
-        }
-        IList<U> r = empty();
-        for (IList<T> n = reverse(); !n.isEmpty(); n = n.tail()) {
-            r = r.add(f.apply(n.head()));
-        }
-        return r;
-    }
-
-    public <U> IList<U> flatMap(Function<? super T, IList<? extends U>> f) {
-        if (isEmpty) {
-            return empty();
-        }
-        IList<U> r = empty();
-        for (IList<T> n = reverse(); !n.isEmpty(); n = n.tail()) {
-            r = r.addAll(f.apply(n.head()));
-        }
-        return r;
-    }
-
-    public <U> U foldRight(BiFunctionFlipper<T, U, U> f, U z) {
-        if(isEmpty){
-            return z;
-        }
-        return reverse().foldLeft(f.flip(), z);
-    }
-
-    public <U> U foldLeft(BiFunctionFlipper<U, T, U> f, U z) {
-        if (isEmpty) {
-            return z;
-        }
-        U r = z;
-        for (IList<T> n = this; !n.isEmpty(); n = n.tail()) {
-            r = f.apply(r, n.head());
-        }
-        return r;
-    }
-
-    /**
-     * Right-fold a function over this non-empty list.
-     *
-     * @param f the function to be folded
-     * @return the folded result
-     */
-    public T foldRight1(BinaryOperatorFlipper<T> f) {
-        return reverse().foldLeft1(f.flip());
-    }
-
-    /**
-     * Left-fold a function over this non-empty list.
-     *
-     * @param f the function to be folded
-     * @return the folded result
-     */
-    public T foldLeft1(BinaryOperator<T> f) {
-        T r = head;
-        for (IList<T> n = tail; !n.isEmpty(); n = n.tail()) {
-            r = f.apply(r, n.head());
-        }
-        return r;
-    }
-
-    @Override
-    public Spliterator<T> spliterator() {
-        return Spliterators.spliterator(
-                this.iterator(),
-                size(),
-                Spliterator.IMMUTABLE + Spliterator.SIZED
-        );
-    }
-
-    /**
-     * Create a {@link Stream} onto this list.
-     *
-     * @return the new stream
-     */
-    public Stream<T> stream() {
-        return StreamSupport.stream(spliterator(), false);
-    }
-
-    /**
-     * Create a parallel {@link Stream} onto this list.
-     *
-     * @return the new stream
-     */
-    public Stream<T> parallelStream() {
-        return StreamSupport.stream(spliterator(), true);
+        return reversed;
     }
 
     @Override
     public Iterator<T> iterator() {
         return new Iterator<>() {
-
-            IList<T> n = IList.this;
+            private IList<T> current = IList.this;
 
             @Override
             public boolean hasNext() {
-                return !n.isEmpty();
+                return !current.isEmpty();
             }
 
             @Override
             public T next() {
-                final T head = n.head();
-                n = n.tail();
-                return head;
+                if (!hasNext()) {
+                    throw new NoSuchElementException();
+                }
+                T value = current.head();
+                current = current.tail();
+                return value;
             }
         };
     }
 
-    public List<T> toList() {
-        return new ListAdaptor<>(this);
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        IList<?> iList = (IList<?>) o;
+        return isEmpty == iList.isEmpty &&
+                Objects.equals(head, iList.head) &&
+                Objects.equals(tail, iList.tail);
     }
 
-    private static class ListAdaptor<T> extends AbstractSequentialList<T> {
+    @Override
+    public int hashCode() {
+        return Objects.hash(head, tail, isEmpty);
+    }
 
-        private final IList<T> impl;
-        private final int size;
+    /**
+     * Convert a list of {@link Character}s into a {@link String}.
+     *
+     * @param l the list of {@code Character}s
+     * @return a {@code String}
+     */
+    public static String listToString(IList<Character> l) {
+        return l.foldLeft(new StringBuilder(), StringBuilder::append).toString();
+    }
 
-        ListAdaptor(IList<T> impl) {
-            this.impl = impl;
-            size = impl.size();
+    @Override
+    public String toString() {
+        if (isEmpty) {
+            return "[]";
         }
-
-        @Override
-        public ListIterator<T> listIterator(int index) {
-
-            return new ListIterator<>() {
-
-                private int pos = index;
-                private IList<T> node = move(impl, index);
-
-                private IList<T> move(IList<T> node, int count) {
-                    for (int i = 0; i < count; ++i) {
-                        node = node.tail();
-                    }
-                    return node;
-                }
-
-                @Override
-                public boolean hasNext() {
-                    return pos < size;
-                }
-
-                @Override
-                public T next() {
-                    if (!hasNext()) {
-                        throw new NoSuchElementException();
-                    } else {
-                        final T ret = node.head();
-                        node = node.tail();
-                        ++pos;
-                        return ret;
-                    }
-                }
-
-                @Override
-                public boolean hasPrevious() {
-                    return pos >= 0;
-                }
-
-                @Override
-                public T previous() {
-                    if (!hasPrevious()) {
-                        throw new NoSuchElementException();
-                    } else {
-                        --pos;
-                        node = move(impl, pos);
-                        ++pos;
-                        return node.head();
-                    }
-                }
-
-                @Override
-                public int nextIndex() {
-                    return pos;
-                }
-
-                @Override
-                public int previousIndex() {
-                    return pos - 1;
-                }
-
-                @Override
-                public void remove() {
-                    throw modError();
-                }
-
-                @Override
-                public void set(T t) {
-                    throw modError();
-                }
-
-                @Override
-                public void add(T t) {
-                    throw modError();
-                }
-
-                private UnsupportedOperationException modError() {
-                    return new UnsupportedOperationException("IList can not be modified");
-                }
-            };
+        StringBuilder sb = new StringBuilder("[");
+        IList<T> current = this;
+        while (!current.isEmpty()) {
+            sb.append(current.head()).append(", ");
+            current = current.tail();
         }
+        sb.setLength(sb.length() - 2); // Remove the last ", "
+        sb.append("]");
+        return sb.toString();
+    }
 
-        @Override
-        public int size() {
-            return size;
+    // Additional methods from previous context
+
+    /**
+     * Map function over the list.
+     *
+     * @param mapper the function to apply to each element
+     * @param <R>    the result type
+     * @return a new list with the mapped elements
+     */
+    public <R> IList<R> map(Function<T, R> mapper) {
+        if (isEmpty) {
+            return empty();
+        } else {
+            return tail().map(mapper).add(mapper.apply(head()));
         }
+    }
+
+    /**
+     * Match function to handle both non-empty and empty cases.
+     *
+     * @param nonEmptyCase the function to apply if the list is non-empty
+     * @param emptyCase    the supplier to provide a result if the list is empty
+     * @param <R>          the result type
+     * @return the result of applying the appropriate function
+     */
+    public <R> R match(Function<IList<T>, R> nonEmptyCase, Supplier<R> emptyCase) {
+        if (isEmpty) {
+            return emptyCase.get();
+        } else {
+            return nonEmptyCase.apply(this);
+        }
+    }
+
+    /**
+     * Fold left function over the list.
+     *
+     * @param identity the initial value
+     * @param operator the binary operator to apply
+     * @param <R>      the result type
+     * @return the result of folding the list
+     */
+    public <R> R foldLeft(R identity, BiFunctionFlipper<R,T,R> operator) {
+        R result = identity;
+        for (T element : this) {
+            result = operator.apply(result, element);
+        }
+        return result;
+    }
+
+    /**
+     * Fold left function over the list with at least one element.
+     *
+     * @param operator the binary operator to apply
+     * @return the result of folding the list
+     */
+    public T foldLeft1(BinaryOperatorFlipper<T> operator) {
+        if (isEmpty) {
+            throw new UnsupportedOperationException("Cannot fold an empty list");
+        }
+        T result = head();
+        IList<T> current = tail();
+        while (!current.isEmpty()) {
+            result = operator.apply(result, current.head());
+            current = current.tail();
+        }
+        return result;
+    }
+
+    /**
+     * Fold right function over the list.
+     *
+     * @param identity the initial value
+     * @param operator the binary operator to apply
+     * @param <R>      the result type
+     * @return the result of folding the list
+     */
+    public <R> R foldRight(R identity, BiFunctionFlipper<T,R,R> operator) {
+        if (isEmpty) {
+            return identity;
+        } else {
+            return operator.apply(head(), tail().foldRight(identity, operator));
+        }
+    }
+
+    /**
+     * Convert the list to a stream.
+     *
+     * @return a stream of the list elements
+     */
+    public Stream<T> stream() {
+        return StreamSupport.stream(spliterator(), false);
     }
 }

@@ -35,7 +35,7 @@ abstract class Utils {
     static <A> A reduce(A a, IList<Tuple<BinaryOperator<A>, A>> lopA) {
         return lopA.match(
                 nel -> nel.head().first().apply(a, reduce(nel.head().second(), nel.tail())),
-                nil -> a
+                () -> a
         );
     }
 
