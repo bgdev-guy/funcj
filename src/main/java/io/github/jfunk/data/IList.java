@@ -26,6 +26,9 @@ public class IList<T> implements Iterable<T> {
     private final IList<T> tail;
     private boolean isEmpty= true;
 
+    // Static Empty instance
+    private static final IList<?> EMPTY = new IList<>();
+
     public IList(T head, IList<T> tail) {
         this.head = Objects.requireNonNull(head);
         this.tail = Objects.requireNonNull(tail);
@@ -43,8 +46,9 @@ public class IList<T> implements Iterable<T> {
      * @param <T> the element type
      * @return an empty list
      */
+    @SuppressWarnings("unchecked")
     public static <T> IList<T> empty() {
-        return new IList<>();
+        return (IList<T>) EMPTY;
     }
 
     /**
