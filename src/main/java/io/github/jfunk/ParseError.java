@@ -11,6 +11,6 @@ public record ParseError(int position, String description, Optional<ParseError> 
     @Override
     public String toString() {
         return "ParseError at position " + position + ": " + description +
-                nextError.map(error -> "\nCaused by: " + error.toString()).orElse("");
+                nextError.map(error -> "\nCaused by: " + error).orElse("");
     }
 }

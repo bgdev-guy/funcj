@@ -2,7 +2,6 @@ package io.github.jfunk;
 
 
 import io.github.jfunk.data.IList;
-
 import io.github.jfunk.data.Tuple;
 import io.github.jfunk.data.Unit;
 
@@ -27,9 +26,9 @@ import static io.github.jfunk.Utils.failureEof;
 public class Parser<I, A> {
 
     Supplier<Boolean> acceptsEmpty;
-    Function<Input<I>,Result<I,A>> applyHandler;
+    Function<Input<I>, Result<I, A>> applyHandler;
 
-    public Parser(Supplier<Boolean> acceptsEmpty, Function<Input<I>,Result<I,A>> applyHandler) {
+    public Parser(Supplier<Boolean> acceptsEmpty, Function<Input<I>, Result<I, A>> applyHandler) {
         this.acceptsEmpty = acceptsEmpty;
         this.applyHandler = applyHandler;
     }
@@ -82,30 +81,26 @@ public class Parser<I, A> {
      * @return a parser that returns the result of applying the parsed function to the parsed value
      */
     public static <I, A, B> Parser<I, B> ap(Parser<I, Function<A, B>> pf, Parser<I, A> pa) {
-        return new Parser<>(
-                Utils.and(pf.acceptsEmpty(), pa.acceptsEmpty())
-        ) {
-            @Override
-            public Result<I, B> apply(Input<I> in) {
-                final Result<I, Function<A, B>> r = pf.apply(in);
+        return new Parser<>(Utils.and(pf.acceptsEmpty(), pa.acceptsEmpty()),
+                in -> {
+                    final Result<I, Function<A, B>> r = pf.apply(in);
 
-                if (r.isSuccess()) {
-                    final Result.Success<I, Function<A, B>> success = (Result.Success<I, Function<A, B>>) r;
-                    final Input<I> next = success.next();
-                    if (!pa.acceptsEmpty().get()) {
-                        if (next.isEof()) {
-                            return failureEof(pa, next);
+                    if (r.isSuccess()) {
+                        final Result.Success<I, Function<A, B>> success = (Result.Success<I, Function<A, B>>) r;
+                        final Input<I> next = success.next();
+                        if (!pa.acceptsEmpty().get()) {
+                            if (next.isEof()) {
+                                return failureEof(pa, next);
+                            }
                         }
+                        final Result<I, A> r2 = pa.apply(next);
+                        if (r2.isSuccess()) {
+                            return r2.map(success.value());
+                        }
+                        return (Result.Failure<I, B>) r2;
                     }
-                    final Result<I, A> r2 = pa.apply(next);
-                    if (r2.isSuccess()) {
-                        return r2.map(success.value());
-                    }
-                    return (Result<I, B>) r2;
-                }
-                return ((Result.Failure<I, Function<A, B>>) r).cast();
-            }
-        };
+                    return ((Result.Failure<I, Function<A, B>>) r).cast();
+                });
     }
 
     /**
@@ -197,7 +192,7 @@ public class Parser<I, A> {
      * @return a supplier that returns true if the parser accepts empty input
      */
     public Supplier<Boolean> acceptsEmpty() {
-        if (applyHandler == null){
+        if (applyHandler == null) {
             throw new RuntimeException("Uninitialised Parser");
         }
         return acceptsEmpty;
@@ -212,11 +207,12 @@ public class Parser<I, A> {
      * @return the parser result
      */
     public Result<I, A> apply(Input<I> in) {
-        if (applyHandler == null){
+        if (applyHandler == null) {
             throw new RuntimeException("Uninitialised Parser");
         }
         return applyHandler.apply(in);
     }
+
     /**
      * Cast this parser to another type.
      *
@@ -418,7 +414,7 @@ public class Parser<I, A> {
      * @return a parser that applies this parser zero or more times alternated with the separator parser
      */
     public <SEP> Parser<I, IList<A>> sepBy(Parser<I, SEP> sep) {
-        return this.sepBy1(sep).map(l -> (IList<A>) l)
+        return this.sepBy1(sep).map(l -> l)
                 .or(pure(IList.empty()));
     }
 
@@ -478,7 +474,7 @@ public class Parser<I, A> {
     /**
      * Parse right-associative operator expressions.
      *
-     * @param op  the parser for the binary operator
+     * @param op the parser for the binary operator
      * @return a parser that parses right-associative operator expressions
      */
     public Parser<I, A> chainr1(Parser<I, BinaryOperator<A>> op) {
@@ -492,8 +488,8 @@ public class Parser<I, A> {
     /**
      * Parse right-associative operator expressions with an initial value.
      *
-     * @param op  the parser for the binary operator
-     * @param a   the initial value
+     * @param op the parser for the binary operator
+     * @param a  the initial value
      * @return a parser that parses right-associative operator expressions with an initial value
      */
     public Parser<I, A> chainl(Parser<I, BinaryOperator<A>> op, A a) {
@@ -503,7 +499,7 @@ public class Parser<I, A> {
     /**
      * Parse left-associative operator expressions.
      *
-     * @param op  the parser for the binary operator
+     * @param op the parser for the binary operator
      * @return a parser that parses left-associative operator expressions
      */
     public Parser<I, A> chainl1(Parser<I, BinaryOperator<A>> op) {
@@ -511,6 +507,6 @@ public class Parser<I, A> {
                 op.and(this)
                         .map((f, y) -> x -> f.apply(x, y));
         return this.and(plo.many())
-                .map((a, lf) -> lf.foldLeft(a,(acc, f) -> f.apply(acc)));
+                .map((a, lf) -> lf.foldLeft(a, (acc, f) -> f.apply(acc)));
     }
 }

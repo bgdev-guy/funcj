@@ -15,8 +15,8 @@ import java.util.function.Function;
  */
 public abstract class Result<I, A> {
 
-    Input<I> input;
     final List<ParseError> parseErrors = new ArrayList<>();
+    Input<I> input;
     String error;
     A value;
     Input<I> next;
@@ -95,7 +95,6 @@ public abstract class Result<I, A> {
      */
     public static class Success<I, A> extends Result<I, A> {
 
-
         public Success(A value, Input<I> next) {
             this.success = true;
             this.value = value;
@@ -136,7 +135,6 @@ public abstract class Result<I, A> {
         public void handle(Consumer<Success<I, A>> success, Consumer<Failure<I, A>> failure) {
             success.accept(this);
         }
-
 
         public <B> B match(Function<Success<I, A>, B> success, Function<Failure<I, A>, B> failure) {
             return success.apply(this);

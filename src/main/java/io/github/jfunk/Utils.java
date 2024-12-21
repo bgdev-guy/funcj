@@ -20,7 +20,7 @@ abstract class Utils {
         return () -> l.get() || r.get();
     }
 
-    static <I, A> Result<I, A> failure( Input<I> in) {
+    static <I, A> Result<I, A> failure(Input<I> in) {
         return Result.failure(in, "did not Expect");
     }
 
@@ -47,9 +47,9 @@ abstract class Utils {
         }
     }
 
-    static Optional<Ref<?,?>> ifRefClass(Object value) {
+    static Optional<Ref<?, ?>> ifRefClass(Object value) {
         if (value instanceof Ref) {
-            return Optional.of((Ref<?,?>) value);
+            return Optional.of((Ref<?, ?>) value);
         } else {
             return Optional.empty();
         }

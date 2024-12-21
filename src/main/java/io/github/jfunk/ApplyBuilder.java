@@ -32,7 +32,7 @@ public class ApplyBuilder {
         /**
          * Maps the results of the parsers to a new result using the provided function.
          *
-         * @param f the function to map the results
+         * @param f   the function to map the results
          * @param <R> the result type
          * @return a new parser with the mapped result
          */
@@ -43,7 +43,7 @@ public class ApplyBuilder {
         /**
          * Maps the results of the parsers to a new result using the provided bi-function.
          *
-         * @param f the bi-function to map the results
+         * @param f   the bi-function to map the results
          * @param <R> the result type
          * @return a new parser with the mapped result
          */

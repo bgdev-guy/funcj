@@ -10,6 +10,7 @@ public class Exceptions {
         }
     }
 
+    @SuppressWarnings("unchecked")
     public static <X extends Exception> void throwUnchecked(Exception ex) throws X {
         throw (X) ex;
     }

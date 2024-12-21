@@ -26,7 +26,15 @@ public class Ref<I, A> extends Parser<I, A> {
      * The reference can be subsequently initialised via the {@link Ref#set(Parser)} method.
      */
     public Ref() {
-        super(() -> { throw error(); }, in -> { throw error(); });
+        super(() -> {
+            throw error();
+        }, in -> {
+            throw error();
+        });
+    }
+
+    private static RuntimeException error() {
+        return new RuntimeException("Uninitialised Parser reference");
     }
 
     /**
@@ -64,14 +72,14 @@ public class Ref<I, A> extends Parser<I, A> {
         return impl.apply(in);
     }
 
-    private static RuntimeException error() {
-        return new RuntimeException("Uninitialised Parser reference");
-    }
-
     protected static class Uninitialised<I, A> extends Parser<I, A> {
 
         private Uninitialised() {
-            super(() -> { throw error(); }, in -> { throw error(); });
+            super(() -> {
+                throw error();
+            }, in -> {
+                throw error();
+            });
         }
 
         private static RuntimeException error() {
