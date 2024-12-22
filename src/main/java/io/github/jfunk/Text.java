@@ -1,5 +1,9 @@
 package io.github.jfunk;
 
+import io.github.jfunk.data.IList;
+
+import java.util.function.Function;
+
 import static io.github.jfunk.Combinators.*;
 
 /**
@@ -36,11 +40,10 @@ public abstract class Text {
             );
     private static final Parser<Character, Integer> uintrZero =
             chr('0').map(zs -> 0);
-    private static final Parser<Character, Integer> uintrNotZero =
-            nonZeroDigit.and(digit.many())
-                    .map(d -> ds -> ds.add(d))
-                    .map(ds -> ds.map(Text::digitToInt))
-                    .map(is -> is.foldLeft1((acc, x) -> acc * 10 + x));
+
+    private static final Parser<Character, Integer> uintrNotZero = nonZeroDigitParser(
+            ds -> ds.foldLeft1((acc, x) -> acc * 10 + x)
+    );
     /**
      * A parser for an unsigned integer.
      */
@@ -54,13 +57,12 @@ public abstract class Text {
     private static final Parser<Character, Integer> expnt =
             (chr('e').or(chr('E')))
                     .andR(intr);
+
+    private static final Parser<Character, Long> ulngNotZero = nonZeroDigitParser(
+            ds -> ds.foldLeft(0L, (acc, x) -> acc * 10L + x)
+    );
     private static final Parser<Character, Long> ulngZero =
             chr('0').map(zs -> 0L);
-    private static final Parser<Character, Long> ulngNotZero =
-            nonZeroDigit.and(digit.many())
-                    .map(d -> ds -> ds.add(d))
-                    .map(ds -> ds.map(Text::digitToInt))
-                    .map(ds -> ds.foldLeft(0L, (acc, x) -> acc * 10L + x));
     /**
      * A parser for an unsigned long.
      */
@@ -71,6 +73,7 @@ public abstract class Text {
     public static final Parser<Character, Long> lng =
             sign.and(ulng)
                     .map((sign, i) -> sign ? i : -i);
+
     private static final Parser<Character, Double> floating =
             digit.many()
                     .map(ds -> ds.map(Text::digitToInt))
@@ -92,6 +95,13 @@ public abstract class Text {
                         }
                         return sn ? r : -r;
                     });
+
+    private static <T> Parser<Character, T> nonZeroDigitParser(Function<IList<Integer>, T> converter) {
+        return nonZeroDigit.and(digit.many())
+                .map(d -> ds -> ds.add(d))
+                .map(ds -> ds.map(Text::digitToInt))
+                .map(converter);
+    }
 
     /**
      * Specialisation of {@link Parser#pure(Object)} for {@code Chr}.
@@ -125,26 +135,35 @@ public abstract class Text {
      * @param s the expected string
      * @return a parser for the given string value
      */
+    private static Parser<Character, String> stringParser(String s) {
+        return new Parser<>(() -> false) {
+            @Override
+            public Result<Character, String> apply(Input<Character> in) {
+                for (int i = 0; i < s.length(); ++i) {
+                    if (in.isEof()) {
+                        return Utils.failureEof(this, in);
+                    } else if (!in.get().equals(s.charAt(i))) {
+                        return Utils.failure(in);
+                    } else {
+                        in = in.next();
+                    }
+                }
+                return Result.success(s, in);
+            }
+        };
+    }
+
+    /**
+     * A parser that succeeds if it can extract the given string from the input.
+     *
+     * @param s the expected string
+     * @return a parser for the given string value
+     */
     public static Parser<Character, String> string(String s) {
         return switch (s.length()) {
             case 0 -> Combinators.fail();
             case 1 -> chr(s.charAt(0)).map(Object::toString);
-            default -> new Parser<>(() -> false) {
-                @Override
-                public Result<Character, String> apply(Input<Character> in) {
-                    for (int i = 0; i < s.length(); ++i) {
-                        if (in.isEof()) {
-                            return Utils.failureEof(this, in);
-                        } else if (!in.get().equals(s.charAt(i))) {
-                            return Utils.failure(in);
-                        } else {
-                            in = in.next();
-                        }
-                    }
-
-                    return Result.success(s, in);
-                }
-            };
+            default -> stringParser(s);
         };
     }
 }

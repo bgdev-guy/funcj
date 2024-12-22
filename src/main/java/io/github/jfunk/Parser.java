@@ -4,6 +4,8 @@ package io.github.jfunk;
 import io.github.jfunk.data.IList;
 import io.github.jfunk.data.Tuple;
 import io.github.jfunk.data.Unit;
+import io.github.jfunk.impl.Failure;
+import io.github.jfunk.impl.Success;
 
 import java.util.Iterator;
 import java.util.Optional;
@@ -86,7 +88,7 @@ public class Parser<I, A> {
                     final Result<I, Function<A, B>> r = pf.apply(in);
 
                     if (r.isSuccess()) {
-                        final Result.Success<I, Function<A, B>> success = (Result.Success<I, Function<A, B>>) r;
+                        final Success<I, Function<A, B>> success = (Success<I, Function<A, B>>) r;
                         final Input<I> next = success.next();
                         if (!pa.acceptsEmpty().get()) {
                             if (next.isEof()) {
@@ -95,11 +97,11 @@ public class Parser<I, A> {
                         }
                         final Result<I, A> r2 = pa.apply(next);
                         if (r2.isSuccess()) {
-                            return r2.map(success.value());
+                            return r2.map(success.getOrThrow());
                         }
-                        return (Result.Failure<I, B>) r2;
+                        return (Failure<I, B>) r2;
                     }
-                    return ((Result.Failure<I, Function<A, B>>) r).cast();
+                    return ((Failure<I, Function<A, B>>) r).cast();
                 });
     }
 
@@ -318,31 +320,26 @@ public class Parser<I, A> {
      * @return a parser that applies this parser zero or more times until it fails
      */
     public Parser<I, IList<A>> many() {
-        if (Utils.ifRefClass(this).map(Ref::isInitialised).orElse(true)
-                && acceptsEmpty().get()) {
+        if (Utils.ifRefClass(this).map(Ref::isInitialised).orElse(true) && acceptsEmpty().get()) {
             throw new RuntimeException("Cannot construct a many parser from one that accepts empty");
         }
 
-        return new Parser<>(LTRUE) {
-            @Override
-            public Result<I, IList<A>> apply(Input<I> in) {
-                IList<A> accumulator = IList.empty();
-                while (true) {
-                    if (!in.isEof()) {
-                        final Result<I, A> r = Parser.this.apply(in);
-                        if (r.isSuccess()) {
-                            final Result.Success<I, A> success = (Result.Success<I, A>) r;
-                            accumulator = accumulator.add(success.value());
-                            in = success.next();
-                            continue;
-                        }
-                        return Result.success(accumulator.reverse(), in);
-                    }
-                    return Result.success(accumulator.reverse(), in);
+        return new Parser<>(LTRUE, in -> {
+            IList<A> accumulator = IList.empty();
+            while (!in.isEof()) {
+                Result<I, A> result = Parser.this.apply(in);
+                if (result.isSuccess()) {
+                    Success<I, A> success = (Success<I, A>) result;
+                    accumulator = accumulator.add(success.getOrThrow());
+                    in = success.next();
+                } else {
+                    break;
                 }
             }
-        };
+            return Result.success(accumulator.reverse(), in);
+        });
     }
+
 
     /**
      * A parser that repeatedly applies this parser until the end parser succeeds,
@@ -352,7 +349,7 @@ public class Parser<I, A> {
      * @param <B> the result type of the end parser
      * @return a parser that applies this parser zero or more times until the end parser succeeds
      */
-    public <B> Parser<I, IList<A>> manyTill(Parser<I, B> end) {
+    public <B> Parser<I, IList<A>> manyTill2(Parser<I, B> end) {
         return new Parser<>(end.acceptsEmpty()) {
 
             public Result<I, IList<A>> apply(Input<I> in) {
@@ -361,23 +358,46 @@ public class Parser<I, A> {
                     if (!in.isEof()) {
                         Result<I, B> r = end.apply(in);
                         if (r.isSuccess()) {
-                            final Result.Success<I, B> succ = (Result.Success<I, B>) r;
+                            final Success<I, B> succ = (Success<I, B>) r;
                             in = succ.next();
                             break;
                         }
                         Result<I, A> r2 = Parser.this.apply(in);
                         if (r2.isSuccess()) {
-                            final Result.Success<I, A> succ = (Result.Success<I, A>) r2;
-                            acc = acc.add(succ.value());
+                            final Success<I, A> succ = (Success<I, A>) r2;
+                            acc = acc.add(succ.getOrThrow());
                             in = succ.next();
                         } else {
-                            return ((Result.Failure<I, A>) r2).cast();
+                            return ((Failure<I, A>) r2).cast();
                         }
                     }
                 }
                 return Result.success(acc.reverse(), in);
             }
         };
+    }
+
+    public <B> Parser<I, IList<A>> manyTill(Parser<I, B> end) {
+        return new Parser<>(end.acceptsEmpty(), in -> {
+            IList<A> accumulator = IList.empty();
+            while (true) {
+                if (in.isEof()) {
+                    return Result.failureEof(in, "Unexpected end of input");
+                }
+                Result<I, B> endResult = end.apply(in);
+                if (endResult.isSuccess()) {
+                    return Result.success(accumulator.reverse(), ((Success<I, B>) endResult).next());
+                }
+                Result<I, A> result = Parser.this.apply(in);
+                if (result.isSuccess()) {
+                    Success<I, A> success = (Success<I, A>) result;
+                    accumulator = accumulator.add(success.getOrThrow());
+                    in = success.next();
+                } else {
+                    return Result.failure(in, "Parsing failed before reaching the end parser");
+                }
+            }
+        });
     }
 
     /**

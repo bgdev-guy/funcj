@@ -2,6 +2,7 @@ package io.github.jfunk;
 
 import io.github.jfunk.data.IList;
 import io.github.jfunk.data.Unit;
+import io.github.jfunk.impl.FailureMessage;
 
 import java.util.function.Predicate;
 
@@ -72,7 +73,7 @@ public abstract class Combinators {
             if (in.get().equals(val)) {
                 return Result.success(res, in.next());
             }
-            return new Result.FailureMessage<>(in, "expected %s saw %s".formatted(val, in.get()));
+            return new FailureMessage<>(in, "expected %s saw %s".formatted(val, in.get()));
         });
     }
 

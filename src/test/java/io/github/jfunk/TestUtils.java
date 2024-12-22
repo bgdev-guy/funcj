@@ -33,7 +33,7 @@ abstract class TestUtils {
     static <I, A> void checkSuccess(Parser<I, A> p, Input<I> input, A expVal, Input<I> expInput) {
         p.parse(input).handle(
                 succ -> {
-                    Assert.assertEquals("Parse result value", expVal, succ.value());
+                    Assert.assertEquals("Parse result value", expVal, succ.getOrThrow());
                     Assert.assertEquals("Parse result next input", expInput, succ.next());
                 },
                 fail -> {

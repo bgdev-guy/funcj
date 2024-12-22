@@ -39,14 +39,6 @@ abstract class Utils {
         );
     }
 
-    static <T> Optional<T> ifClass(Class<T> clazz, Object value) {
-        if (clazz.isInstance(value)) {
-            return Optional.of(clazz.cast(value));
-        } else {
-            return Optional.empty();
-        }
-    }
-
     static Optional<Ref<?, ?>> ifRefClass(Object value) {
         if (value instanceof Ref) {
             return Optional.of((Ref<?, ?>) value);
