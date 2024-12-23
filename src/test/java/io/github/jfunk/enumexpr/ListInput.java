@@ -16,7 +16,7 @@ public record ListInput<T>(int position,List<T> data) implements Input<T> {
 
     @Override
     public String toString() {
-        final String dataStr = isEof() ? "EOF" : "...";
+        final String dataStr = isEof() ? "EOF" : get().toString();
         return "ListInput{" + position + ",data=\"" + dataStr + "\"";
     }
 

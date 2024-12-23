@@ -1,4 +1,4 @@
-package io.github.jfunk.impl;
+package io.github.jfunk.impl.result;
 
 import io.github.jfunk.Input;
 import io.github.jfunk.Result;
@@ -41,6 +41,21 @@ public class Success<I, A> implements Result<I, A> {
     @Override
     public void handle(Consumer<Success<I, A>> success, Consumer<Failure<I, A>> failure) {
         success.accept(this);
+    }
+
+    @Override
+    public int getPosition() {
+        return next.position();
+    }
+
+    @Override
+    public void addResult(Result<I, A> result) {
+
+    }
+
+    @Override
+    public Result<I, A> cast() {
+        return this;
     }
 
     @Override

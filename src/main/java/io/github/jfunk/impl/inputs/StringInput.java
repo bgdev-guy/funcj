@@ -1,4 +1,4 @@
-package io.github.jfunk.inputs;
+package io.github.jfunk.impl.inputs;
 
 import io.github.jfunk.Input;
 

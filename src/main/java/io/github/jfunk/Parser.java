@@ -4,8 +4,7 @@ package io.github.jfunk;
 import io.github.jfunk.data.IList;
 import io.github.jfunk.data.Tuple;
 import io.github.jfunk.data.Unit;
-import io.github.jfunk.impl.Failure;
-import io.github.jfunk.impl.Success;
+import io.github.jfunk.impl.result.Success;
 
 import java.util.Iterator;
 import java.util.Optional;
@@ -82,27 +81,30 @@ public class Parser<I, A> {
      * @param <B> the return type of the function
      * @return a parser that returns the result of applying the parsed function to the parsed value
      */
+    @SuppressWarnings("unchecked")
     public static <I, A, B> Parser<I, B> ap(Parser<I, Function<A, B>> pf, Parser<I, A> pa) {
-        return new Parser<>(Utils.and(pf.acceptsEmpty(), pa.acceptsEmpty()),
-                in -> {
-                    final Result<I, Function<A, B>> r = pf.apply(in);
+        return new Parser<>(Utils.and(pf.acceptsEmpty(), pa.acceptsEmpty())) {
+            @Override
+            public Result<I, B> apply(Input<I> in) {
+                Result<I, Function<A, B>> r = pf.apply(in);
 
-                    if (r.isSuccess()) {
-                        final Success<I, Function<A, B>> success = (Success<I, Function<A, B>>) r;
-                        final Input<I> next = success.next();
-                        if (!pa.acceptsEmpty().get()) {
-                            if (next.isEof()) {
-                                return failureEof(pa, next);
-                            }
-                        }
-                        final Result<I, A> r2 = pa.apply(next);
-                        if (r2.isSuccess()) {
-                            return r2.map(success.getOrThrow());
-                        }
-                        return (Failure<I, B>) r2;
-                    }
-                    return ((Failure<I, Function<A, B>>) r).cast();
-                });
+                if (!r.isSuccess()) {
+                    return (Result<I, B>) r.cast();
+                }
+
+                Input<I> next = r.next();
+                if (!pa.acceptsEmpty().get() && next.isEof()) {
+                    return Result.failureEof(next, "Unexpected end of input");
+                }
+
+                Result<I, A> r2 = pa.apply(next);
+                if (!r2.isSuccess()) {
+                    return (Result<I, B>) r2.cast();
+                }
+
+                return r2.map(r.getOrThrow());
+            }
+        };
     }
 
     /**
@@ -340,6 +342,85 @@ public class Parser<I, A> {
         });
     }
 
+    /**
+     * A parser that applies this parser exactly `n` times.
+     * If the parser fails before reaching the required number of repetitions, the parser fails.
+     * If the parser succeeds `n` times, the results are collected in a list and returned by the parser.
+     *
+     * @param n the number of times to apply this parser
+     * @return a parser that applies this parser exactly `n` times
+     * @throws IllegalArgumentException if the number of repetitions is negative
+     */
+    public Parser<I, IList<A>> repeat(int n) {
+        if (n < 0) {
+            throw new IllegalArgumentException("The number of repetitions cannot be negative");
+        }
+        return new Parser<>(() -> n == 0, in -> {
+            IList<A> accumulator = IList.empty();
+            Input<I> currentInput = in;
+            for (int i = 0; i < n; i++) {
+                if (currentInput.isEof()) {
+                    return Result.failureEof(currentInput, "Unexpected end of input");
+                }
+                Result<I, A> result = this.apply(currentInput);
+                if (result.isSuccess()) {
+                    Success<I, A> success = (Success<I, A>) result;
+                    accumulator = accumulator.add(success.getOrThrow());
+                    currentInput = success.next();
+                } else {
+                    return Result.failure(currentInput, "Parsing failed before reaching the required number of repetitions");
+                }
+            }
+            return Result.success(accumulator.reverse(), currentInput);
+        });
+    }
+
+    /**
+     * A parser that applies this parser between `min` and `max` times.
+     * If the parser fails before reaching the minimum number of repetitions, the parser fails.
+     * If the parser succeeds at least `min` times and at most `max` times, the results are collected in a list and returned by the parser.
+     *
+     * @param min the minimum number of times to apply this parser
+     * @param max the maximum number of times to apply this parser
+     * @return a parser that applies this parser between `min` and `max` times
+     * @throws IllegalArgumentException if the number of repetitions is negative or if min is greater than max
+     */
+    public Parser<I, IList<A>> repeat(int min, int max) {
+        if (min < 0 || max < 0) {
+            throw new IllegalArgumentException("The number of repetitions cannot be negative");
+        }
+        if (min > max) {
+            throw new IllegalArgumentException("The minimum number of repetitions cannot be greater than the maximum");
+        }
+        return new Parser<>(() -> min == 0, in -> {
+            IList<A> accumulator = IList.empty();
+            Input<I> currentInput = in;
+            int count = 0;
+            while (count < max) {
+                if (currentInput.isEof()) {
+                    if (count >= min) {
+                        return Result.success(accumulator.reverse(), currentInput);
+                    } else {
+                        return Result.failureEof(currentInput, "Unexpected end of input");
+                    }
+                }
+                Result<I, A> result = this.apply(currentInput);
+                if (result.isSuccess()) {
+                    Success<I, A> success = (Success<I, A>) result;
+                    accumulator = accumulator.add(success.getOrThrow());
+                    currentInput = success.next();
+                    count++;
+                } else {
+                    if (count >= min) {
+                        return Result.success(accumulator.reverse(), currentInput);
+                    } else {
+                        return Result.failure(currentInput, "Parsing failed before reaching the required number of repetitions");
+                    }
+                }
+            }
+            return Result.success(accumulator.reverse(), currentInput);
+        });
+    }
 
     /**
      * A parser that repeatedly applies this parser until the end parser succeeds,
@@ -364,11 +445,10 @@ public class Parser<I, A> {
                         }
                         Result<I, A> r2 = Parser.this.apply(in);
                         if (r2.isSuccess()) {
-                            final Success<I, A> succ = (Success<I, A>) r2;
-                            acc = acc.add(succ.getOrThrow());
-                            in = succ.next();
+                            acc = acc.add(r2.getOrThrow());
+                            in = r2.next();
                         } else {
-                            return ((Failure<I, A>) r2).cast();
+                            return (Result<I, IList<A>>) r2;
                         }
                     }
                 }

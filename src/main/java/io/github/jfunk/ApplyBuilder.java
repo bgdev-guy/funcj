@@ -1,8 +1,6 @@
 package io.github.jfunk;
 
 
-import io.github.jfunk.functions.*;
-
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
@@ -56,6 +54,10 @@ public class ApplyBuilder {
             return new ApplyBuilder2<>(pa, pb.andL(pc));
         }
 
+        public <C> ApplyBuilder2<I, A, B> skipRight(Parser<I, C> pc) {
+            return new ApplyBuilder2<>(pa, pb.andL(pc));
+        }
+
         public <C> ApplyBuilder3<C> and(Parser<I, C> pc) {
             return new ApplyBuilder3<>(pc);
         }
@@ -71,7 +73,7 @@ public class ApplyBuilder {
                 return Parser.ap(ApplyBuilder2.this.map(f), pc);
             }
 
-            public <R> Parser<I, R> map(Function3<A, B, C, R> f) {
+            public <R> Parser<I, R> map(Functions.Func3<A, B, C, R> f) {
                 return map(a -> b -> c -> f.apply(a, b, c));
             }
 
@@ -94,7 +96,7 @@ public class ApplyBuilder {
                     return Parser.ap(ApplyBuilder3.this.map(f), pd);
                 }
 
-                public <R> Parser<I, R> map(Function4<A, B, C, D, R> f) {
+                public <R> Parser<I, R> map(Functions.Func4<A, B, C, D, R> f) {
                     return map(a -> b -> c -> d -> f.apply(a, b, c, d));
                 }
 
@@ -117,7 +119,7 @@ public class ApplyBuilder {
                         return Parser.ap(ApplyBuilder4.this.map(f), pe);
                     }
 
-                    public <R> Parser<I, R> map(Function5<A, B, C, D, E, R> f) {
+                    public <R> Parser<I, R> map(Functions.Func5<A, B, C, D, E, R> f) {
                         return map(a -> b -> c -> d -> e -> f.apply(a, b, c, d, e));
                     }
 
@@ -140,7 +142,7 @@ public class ApplyBuilder {
                             return Parser.ap(ApplyBuilder5.this.map(f), pg);
                         }
 
-                        public <R> Parser<I, R> map(Function6<A, B, C, D, E, G, R> f) {
+                        public <R> Parser<I, R> map(Functions.Func6<A, B, C, D, E, G, R> f) {
                             return map(a -> b -> c -> d -> e -> g -> f.apply(a, b, c, d, e, g));
                         }
 
@@ -163,7 +165,7 @@ public class ApplyBuilder {
                                 return Parser.ap(ApplyBuilder6.this.map(f), ph);
                             }
 
-                            public <R> Parser<I, R> map(Function7<A, B, C, D, E, G, H, R> f) {
+                            public <R> Parser<I, R> map(Functions.Func7<A, B, C, D, E, G, H, R> f) {
                                 return map(a -> b -> c -> d -> e -> g -> h -> f.apply(a, b, c, d, e, g, h));
                             }
 
@@ -186,7 +188,7 @@ public class ApplyBuilder {
                                     return Parser.ap(ApplyBuilder7.this.map(f), pj);
                                 }
 
-                                public <R> Parser<I, R> map(Function8<A, B, C, D, E, G, H, J, R> f) {
+                                public <R> Parser<I, R> map(Functions.Func8<A, B, C, D, E, G, H, J, R> f) {
                                     return map(a -> b -> c -> d -> e -> g -> h -> j -> f.apply(a, b, c, d, e, g, h, j));
                                 }
 

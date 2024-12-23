@@ -1,7 +1,7 @@
 package io.github.jfunk;
 
-import io.github.jfunk.inputs.ReaderInput;
-import io.github.jfunk.inputs.StringInput;
+import io.github.jfunk.impl.inputs.ReaderInput;
+import io.github.jfunk.impl.inputs.StringInput;
 
 import java.io.Reader;
 
