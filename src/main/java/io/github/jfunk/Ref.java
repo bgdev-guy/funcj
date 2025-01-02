@@ -1,7 +1,6 @@
 package io.github.jfunk;
 
 import java.util.Objects;
-import java.util.function.Supplier;
 
 /**
  * A reference to a {@link Parser}.
@@ -63,8 +62,8 @@ public class Ref<I, A> extends Parser<I, A> {
     }
 
     @Override
-    public Supplier<Boolean> acceptsEmpty() {
-        return () -> impl.acceptsEmpty().get();
+    public boolean acceptsEOF() {
+        return impl.acceptsEOF();
     }
 
     @Override

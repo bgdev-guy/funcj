@@ -206,10 +206,10 @@ public abstract class Combinators {
      * @return a parser that attempts one or more parsers in turn
      */
     public static <I, A> Parser<I, A> choice(IList<Parser<I, A>> ps) {
-        return new Parser<>(ps.map(Parser::acceptsEmpty).foldLeft1(Utils::or), in -> {
+        return new Parser<>(() -> false, in -> {
             if (in.isEof()) {
                 for (Parser<I, A> p : ps) {
-                    if (p.acceptsEmpty().get()) {
+                    if (p.acceptsEOF()) {
                         return p.apply(in);
                     }
                 }

@@ -12,6 +12,8 @@ import java.util.function.BinaryOperator;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import static io.github.jfunk.Utils.LTRUE;
@@ -38,9 +40,45 @@ public class Parser<I, A> {
         this(acceptsEmpty, Utils::failure);
     }
 
+    public Parser(Function<Input<I>, Result<I, A>> applyHandler) {
+        this(()-> false, applyHandler);
+    }
+
+
     public Parser() {
     }
 
+    // A parser that succeeds if the given parser fails, and fails if the given parser succeeds.
+    public <B> Parser<I, Unit> not(Parser<I, B> p) {
+        return new Parser<>(in -> {
+            Result<I, B> result = p.apply(in);
+            if (result.isSuccess()) {
+                return Result.failure(in, "Unexpected success");
+            }
+            return Result.success(Unit.UNIT, in);
+        });
+    }
+
+    // A parser that parses without consuming any input.
+    public <B> Parser<I, B> lookahead(Parser<I, B> p) {
+        return new Parser<>(in -> {
+            Result<I, B> result = p.apply(in);
+            if (result.isSuccess()) {
+                return Result.success(result.getOrThrow(), in);
+            }
+            return result;
+        });
+    }
+
+    // A parser that applies another parser zero or more times, each time followed by a separator parser.
+    public <SEP> Parser<I, IList<A>> terminatedBy(Parser<I, SEP> sep) {
+        return this.andL(sep).many();
+    }
+
+    // A parser that applies another parser one or more times, each time followed by a separator parser.
+    public <SEP> Parser<I, IList<A>> terminatedBy1(Parser<I, SEP> sep) {
+        return this.andL(sep).many1();
+    }
 
     /**
      * Construct an uninitialized parser reference object.
@@ -83,7 +121,7 @@ public class Parser<I, A> {
      */
     @SuppressWarnings("unchecked")
     public static <I, A, B> Parser<I, B> ap(Parser<I, Function<A, B>> pf, Parser<I, A> pa) {
-        return new Parser<>(Utils.and(pf.acceptsEmpty(), pa.acceptsEmpty())) {
+        return new Parser<>(() -> pf.acceptsEOF() && pa.acceptsEOF()) {
             @Override
             public Result<I, B> apply(Input<I> in) {
                 Result<I, Function<A, B>> r = pf.apply(in);
@@ -93,7 +131,7 @@ public class Parser<I, A> {
                 }
 
                 Input<I> next = r.next();
-                if (!pa.acceptsEmpty().get() && next.isEof()) {
+                if (!pa.acceptsEOF() && next.isEof()) {
                     return Result.failureEof(next, "Unexpected end of input");
                 }
 
@@ -155,6 +193,31 @@ public class Parser<I, A> {
         );
     }
 
+
+    @SafeVarargs
+    public static <I, A> Parser<I, IList<A>> sequence(Parser<I, A>... parsers) {
+        return new Parser<>(() -> {
+            for (Parser<I, A> parser : parsers) {
+                if (!parser.acceptsEOF()) {
+                    return false;
+                }
+            }
+            return true;
+        }, in -> {
+            IList<A> results = IList.empty();
+            Input<I> currentInput = in;
+            for (Parser<I, A> parser : parsers) {
+                Result<I, A> result = parser.apply(currentInput);
+                if (!result.isSuccess()) {
+                    return Result.failure(currentInput, "Parsing failed");
+                }
+                results = results.add(result.getOrThrow());
+                currentInput = result.next();
+            }
+            return Result.success(results.reverse(), currentInput);
+        });
+    }
+
     /**
      * Variation of {@link Parser#sequence(IList)} for streams.
      * Translates a stream of parsers into a parser that returns a stream of parsed values.
@@ -182,7 +245,7 @@ public class Parser<I, A> {
      */
     public Result<I, A> parse(Input<I> in) {
         final Parser<I, A> parserAndEof = this.andL(Combinators.eof());
-        if (acceptsEmpty().get()) {
+        if (acceptsEOF()) {
             return parserAndEof.apply(in);
         } else if (in.isEof()) {
             return failureEof(this, in);
@@ -195,11 +258,11 @@ public class Parser<I, A> {
      *
      * @return a supplier that returns true if the parser accepts empty input
      */
-    public Supplier<Boolean> acceptsEmpty() {
+    public boolean acceptsEOF() {
         if (applyHandler == null) {
             throw new RuntimeException("Uninitialised Parser");
         }
-        return acceptsEmpty;
+        return acceptsEmpty.get();
     }
 
     /**
@@ -237,8 +300,9 @@ public class Parser<I, A> {
      * @return a parser that returns the function applied to this parser's result
      */
     public <B> Parser<I, B> map(Function<A, B> f) {
+        Supplier<Boolean> acceptsEmpty = this::acceptsEOF;
         return new Parser<>(
-                Parser.this.acceptsEmpty()
+                acceptsEmpty
         ) {
             @Override
             public Result<I, B> apply(Input<I> in) {
@@ -258,14 +322,14 @@ public class Parser<I, A> {
     @SuppressWarnings("unchecked")
     public <B extends A> Parser<I, A> or(Parser<I, B> rhs) {
         return new Parser<>(
-                Utils.or(Parser.this.acceptsEmpty(), rhs.acceptsEmpty())
+                () -> Parser.this.acceptsEOF() || rhs.acceptsEOF()
         ) {
             @Override
             public Result<I, A> apply(Input<I> in) {
                 if (in.isEof()) {
-                    if (Parser.this.acceptsEmpty().get()) {
+                    if (Parser.this.acceptsEOF()) {
                         return Parser.this.apply(in);
-                    } else if (rhs.acceptsEmpty().get()) {
+                    } else if (rhs.acceptsEOF()) {
                         return (Result<I, A>) rhs.apply(in);
                     }
                     return failureEof(this, in);
@@ -277,6 +341,34 @@ public class Parser<I, A> {
                 return (Result<I, A>) rhs.apply(in);
             }
         };
+    }
+
+    /**
+     * A parser that succeeds if the given parser succeeds, and returns the specified item.
+     *
+     * @param <I> the type of input symbols
+     * @param <A> the type of the parser's result
+     * @param <B> the type of the item to return
+     * @param parser the parser to apply
+     * @param item the item to return if the parser succeeds
+     * @return a parser that returns the specified item if the given parser succeeds
+     */
+    public static <I, A, B> Parser<I, B> constant(Parser<I, A> parser, B item) {
+        return parser.map(result -> item);
+    }
+
+    /**
+     * A parser that succeeds if the given parser succeeds, and returns the specified item.
+     *
+     * @param <I> the type of input symbols
+     * @param <A> the type of the parser's result
+     * @param <B> the type of the item to return
+     * @param parser the parser to apply
+     * @param item the item to return if the parser succeeds
+     * @return a parser that returns the specified item if the given parser succeeds
+     */
+    public static <I, A, B> Parser<I, B> constant2(Parser<I, A> parser, Function<A,B> item) {
+        return parser.map(item);
     }
 
     /**
@@ -322,7 +414,7 @@ public class Parser<I, A> {
      * @return a parser that applies this parser zero or more times until it fails
      */
     public Parser<I, IList<A>> many() {
-        if (Utils.ifRefClass(this).map(Ref::isInitialised).orElse(true) && acceptsEmpty().get()) {
+        if (Utils.ifRefClass(this).map(Ref::isInitialised).orElse(true) && acceptsEOF()) {
             throw new RuntimeException("Cannot construct a many parser from one that accepts empty");
         }
 
@@ -335,6 +427,9 @@ public class Parser<I, A> {
                     accumulator = accumulator.add(success.getOrThrow());
                     in = success.next();
                 } else {
+                    if (result.getPosition() > in.position()) {
+                        return Result.failure(result.next(), "result.getError()");
+                    }
                     break;
                 }
             }
@@ -431,7 +526,7 @@ public class Parser<I, A> {
      * @return a parser that applies this parser zero or more times until the end parser succeeds
      */
     public <B> Parser<I, IList<A>> manyTill2(Parser<I, B> end) {
-        return new Parser<>(end.acceptsEmpty()) {
+        return new Parser<>(end::acceptsEOF) {
 
             public Result<I, IList<A>> apply(Input<I> in) {
                 IList<A> acc = IList.empty();
@@ -458,13 +553,13 @@ public class Parser<I, A> {
     }
 
     public <B> Parser<I, IList<A>> manyTill(Parser<I, B> end) {
-        return new Parser<>(end.acceptsEmpty(), in -> {
+        return new Parser<>(end::acceptsEOF, in -> {
             IList<A> accumulator = IList.empty();
             while (true) {
                 if (in.isEof()) {
                     return Result.failureEof(in, "Unexpected end of input");
                 }
-                Result<I, B> endResult = end.apply(in);
+                Result<I, B> endResult = end.apply(in).cast();
                 if (endResult.isSuccess()) {
                     return Result.success(accumulator.reverse(), ((Success<I, B>) endResult).next());
                 }
@@ -472,7 +567,7 @@ public class Parser<I, A> {
                 if (result.isSuccess()) {
                     Success<I, A> success = (Success<I, A>) result;
                     accumulator = accumulator.add(success.getOrThrow());
-                    in = success.next();
+                    in =  success.next();
                 } else {
                     return Result.failure(in, "Parsing failed before reaching the end parser");
                 }
@@ -608,5 +703,37 @@ public class Parser<I, A> {
                         .map((f, y) -> x -> f.apply(x, y));
         return this.and(plo.many())
                 .map((a, lf) -> lf.foldLeft(a, (acc, f) -> f.apply(acc)));
+    }
+
+    /**
+     * Constructs a parser that matches the input against the given regular expression.
+     *
+     * @param regex the regular expression string
+     * @return a parser that matches the input against the regular expression
+     */
+    public static Parser<Character, String> regex(String regex) {
+        Pattern pattern = Pattern.compile(regex);
+        return new Parser<>(() -> false, in -> {
+            StringBuilder sb = new StringBuilder();
+            Input<Character> currentInput = in;
+            while (!currentInput.isEof()) {
+                sb.append(currentInput.get());
+                Matcher matcher = pattern.matcher(sb.toString());
+                if (matcher.matches()) {
+                    currentInput = currentInput.next();
+                } else if (matcher.hitEnd()) {
+                    currentInput = currentInput.next();
+                } else {
+                    sb.deleteCharAt(sb.length() - 1);
+                    break;
+                }
+            }
+            Matcher finalMatcher = pattern.matcher(sb.toString());
+            if (finalMatcher.matches()) {
+                return Result.success(sb.toString(), currentInput);
+            } else {
+                return Result.failure(in, "Input does not match the regular expression");
+            }
+        });
     }
 }

@@ -5,7 +5,7 @@ import org.junit.*;
 public class GrammarTest {
 
     static  {
-        Grammar.parser.acceptsEmpty();
+        Grammar.parser.acceptsEOF();
     }
 
     private static void assertSuccess(String s, String expected) {

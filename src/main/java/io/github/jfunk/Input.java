@@ -67,5 +67,7 @@ public interface Input<I> {
 
     int position();
 
+
+
 }
 
